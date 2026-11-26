@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Margin (mock)</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource/source-serif-4/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/source-serif-4/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/source-serif-4/700.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-sans/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-mono/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-mono/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/ibm-plex-mono/600.css" />
+    <link rel="stylesheet" href="../src/renderer/styles.css" />
+  </head>
+  <body>
+    <div class="shell" id="shell">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main class="view" id="view"></main>
+    </div>
+    <div class="titlebar"></div>
+    <div class="drop-overlay" aria-hidden="true"><div class="stack"><p class="label">Drop to add</p><p class="h2">Let go of the file anywhere</p></div></div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="mock.js"></script>
+    <script type="module" src="../src/renderer/app.js"></script>
+  </body>
+</html>
