@@ -120,7 +120,7 @@ function renderSidebar() {
   const met = today >= goal;
 
   side.replaceChildren(
-    h('div.wordmark', {}, h('b', {}, 'Margin'), h('i')),
+    h('div.wordmark', {}, h('b', {}, 'Margin'), h('i'), h('span.ver', {}, 'v' + S.version)),
     h(
       'nav.nav',
       { 'aria-label': t('Main') },

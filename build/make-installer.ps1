@@ -22,6 +22,8 @@ Remove-Item $zip -ErrorAction SilentlyContinue
 [IO.Compression.ZipFile]::CreateFromDirectory($app, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
 
 $json = [Text.Encoding]::UTF8.GetBytes((@{ version = $version } | ConvertTo-Json -Compress))
+# Keep only the installer being built; electron-builder never clears old ones out.
+Get-ChildItem (Join-Path $root 'dist') -File | Where-Object Name -match '^Margin[ -]Setup[ -].*\.(exe|blockmap)$' | Remove-Item
 $name = "Margin-Setup-$version.exe"
 $out = Join-Path $root "dist\$name"
 $fs = [IO.File]::Create($out)

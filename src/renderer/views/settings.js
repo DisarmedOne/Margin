@@ -1,6 +1,9 @@
 import { h, api, toast, iconEl, PROVIDER_COPY } from '../ui.js';
 import { t } from '../i18n.js';
 
+// The address a code was sent to. Kept here so leaving Settings doesn't lose the code step.
+let codeSentTo = null;
+
 export default function settings(root, S, ctx) {
   const page = h('div.page');
   root.append(page);
@@ -99,12 +102,116 @@ export default function settings(root, S, ctx) {
     return wrap;
   }
 
+  function accountBlock() {
+    if (S.account) {
+      return h(
+        'div.stack',
+        { style: '--gap: var(--s3)' },
+        h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
+        h(
+          'div',
+          {},
+          h(
+            'button.btn.sm.secondary',
+            {
+              onclick: async () => {
+                try {
+                  S.account = await api(window.margin.signOut());
+                  toast(t('Signed out.'));
+                  draw();
+                } catch (e) {
+                  toast(e.message);
+                }
+              },
+            },
+            t('Sign out'),
+          ),
+        ),
+      );
+    }
+
+    const asking = !codeSentTo;
+    const label = asking ? t('Email address') : t('Sign-in code');
+    const input = h(
+      'input.input',
+      asking
+        ? { type: 'email', autocomplete: 'email', placeholder: 'name@example.com', 'aria-label': label }
+        : { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '12', 'aria-label': label },
+    );
+    const err = h('p.error-text', { role: 'alert' });
+    const idle = asking ? t('Email me a code') : t('Sign in');
+    const btn = h('button.btn.sm', { type: 'submit' }, idle);
+
+    // Runs one request with the button locked, showing any problem under the field.
+    const run = async (busy, work) => {
+      btn.disabled = true;
+      btn.textContent = busy;
+      err.textContent = '';
+      try {
+        await work();
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false;
+        btn.textContent = idle;
+      }
+    };
+
+    const submit = (e) => {
+      e.preventDefault();
+      if (asking) {
+        run(t('Sending…'), async () => {
+          codeSentTo = await api(window.margin.sendCode(input.value));
+          draw();
+          page.querySelector('input[autocomplete="one-time-code"]')?.focus();
+        });
+      } else {
+        run(t('Checking…'), async () => {
+          S.account = await api(window.margin.verifyCode(codeSentTo, input.value));
+          codeSentTo = null;
+          draw();
+        });
+      }
+    };
+
+    return h(
+      'form.field',
+      { onsubmit: submit, novalidate: true },
+      asking ? null : h('p.small', { style: 'color: var(--ink)' }, t('Enter the code we sent to {email}.', { email: codeSentTo })),
+      h('label.label', {}, label),
+      input,
+      err,
+      h('div.row', {}, btn),
+      asking
+        ? null
+        : h(
+            'div.row',
+            {},
+            h(
+              'button.link.quiet',
+              {
+                type: 'button',
+                onclick: () =>
+                  run(t('Sending…'), async () => {
+                    await api(window.margin.sendCode(codeSentTo));
+                    toast(t('New code sent.'));
+                    draw();
+                  }),
+              },
+              t('Send a new code'),
+            ),
+            h('button.link.quiet', { type: 'button', onclick: () => { codeSentTo = null; draw(); } }, t('Use a different email')),
+          ),
+    );
+  }
+
   function draw() {
     page.replaceChildren(
       h('header.pagehead', {}, h('div.stack', {}, h('p.label', {}, t('Settings')), h('h1.h1', {}, t('Preferences')))),
       h(
         'div.settings',
         {},
+        group(t('Account')),
+        row(t('Steelfable account'), t('Optional for now. Your papers and progress stay on this computer.'), accountBlock()),
         group(t('Learning')),
         row(
           t('Language'),

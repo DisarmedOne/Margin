@@ -7,6 +7,7 @@ const store = require('./store');
 const ai = require('./ai');
 const srs = require('./srs');
 const updater = require('./updater');
+const account = require('./account');
 
 const MAX_BYTES = 30 * 1024 * 1024; // Claude's request limit is 32 MB including base64 overhead headroom
 const ACCEPTED = ['.pdf', '.docx', '.txt', '.md'];
@@ -327,6 +328,29 @@ function profileView() {
   };
 }
 
+// ---------- Steelfable account ----------
+// Only the email is shown to the page; the session stays here, encrypted like the API keys.
+const publicAccount = () => (S().account ? { email: S().account.email } : null);
+
+async function accountVerify(email, code) {
+  const r = await account.verifyCode(email, code);
+  S().account = { email: r.email, session: safeStorage.encryptString(JSON.stringify(r.session)).toString('base64') };
+  await store.save();
+  return publicAccount();
+}
+
+async function accountSignOut() {
+  const saved = S().account;
+  delete S().account;
+  await store.save();
+  try {
+    await account.signOut(JSON.parse(safeStorage.decryptString(Buffer.from(saved.session, 'base64'))));
+  } catch {
+    /* nothing saved, or it can no longer be read */
+  }
+  return null;
+}
+
 // ---------- IPC ----------
 // Every handler resolves to { ok, data } or { ok: false, error } so the renderer gets clean messages.
 function handle(channel, fn) {
@@ -352,7 +376,11 @@ function registerIpc() {
     providers: providerList(),
     languages: ai.LANGUAGES,
     version: app.getVersion(),
+    account: publicAccount(),
   }));
+  handle('account:send', account.sendCode);
+  handle('account:verify', accountVerify);
+  handle('account:signout', accountSignOut);
   handle('review:pool', () => {
     // Random cards for the lightning round; scheduling is untouched.
     const cards = [...S().cards].sort(() => Math.random() - 0.5).slice(0, 40);

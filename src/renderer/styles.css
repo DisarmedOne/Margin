@@ -147,6 +147,7 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
   overflow: hidden;
 }
 .wordmark { display: flex; align-items: baseline; gap: var(--s2); padding: 0 var(--s2); }
+.wordmark .ver { margin-left: auto; font: 500 11px/1 var(--mono); color: var(--ink-3); letter-spacing: 0.04em; }
 .wordmark b { font: 700 24px/1 var(--serif); color: var(--ink); letter-spacing: -0.02em; }
 .wordmark i { width: 7px; height: 7px; background: var(--accent); display: inline-block; transform: translateY(-1px); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
