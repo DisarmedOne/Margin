@@ -21,7 +21,6 @@ export default function library(root, S, ctx) {
 
   const ready = S.papers.filter((p) => p.status === 'ready');
   const finishedChapters = ready.reduce((a, p) => a + doneCount(p), 0);
-
   page.append(
     h(
       'header.pagehead',
@@ -29,11 +28,12 @@ export default function library(root, S, ctx) {
       h(
         'div.stack',
         {},
-        h('p.label', {}, `${t('Library')} · ${tn(S.papers.length, '{n} paper|{n} papers')} · ${tn(finishedChapters, '{n} chapter finished|{n} chapters finished')}`),
+        h('p.label', {}, `${t('Library')} · ${tn(finishedChapters, '{n} chapter finished|{n} chapters finished')}`),
         h('h1.h1', {}, t('Your papers')),
       ),
       h('button.btn', { onclick: ctx.pickFiles }, iconEl('plus'), t('Add paper')),
     ),
+    paperQuota(),
   );
 
   const resume = ready
@@ -66,6 +66,23 @@ export default function library(root, S, ctx) {
 
   const tick = setInterval(() => timers.forEach((fn) => fn()), 1000);
   return () => clearInterval(tick);
+}
+
+// How many of the account's papers are used. Stays hidden if the server cannot be reached.
+function paperQuota() {
+  const box = h('section.quota', { style: 'display: none' });
+  window.margin.paperUsage().then((r) => {
+    if (!r.ok) return;
+    const { used, max } = r.data;
+    box.classList.toggle('full', used >= max);
+    box.replaceChildren(
+      h('p.h3', {}, t('{n} of {max} papers used', { n: used, max })),
+      h('div.segments', { 'aria-hidden': 'true' }, Array.from({ length: max }, (_, i) => h(`i${i < used ? '.done' : ''}`))),
+      h('p.small', {}, t('Removing a paper does not free its place.')),
+    );
+    box.style.display = '';
+  });
+  return box;
 }
 
 function continueCard(p, ctx) {
@@ -215,8 +232,8 @@ function emptyLibrary(S, ctx) {
     h(
       'div.stack',
       { style: '--gap: var(--s1)' },
-      h('p.h3', {}, t('Drop a PDF, Word or text file here')),
-      h('p.small', {}, t('Up to 30 MB. Scanned PDFs work too, since the AI reads the page images.')),
+      h('p.h3', {}, t('Drop a paper, slides or a saved web page here')),
+      h('p.small', {}, t('PDF, Word, PowerPoint, saved web pages and text files. From slides and web pages, only the text is read.')),
     ),
     h('button.btn', { onclick: ctx.pickFiles }, t('Choose a file')),
   );
@@ -231,6 +248,7 @@ function emptyLibrary(S, ctx) {
       h('p.lede', {}, t('Add a paper and Margin turns it into a short route of chapters. Each chapter is a ten-minute level you can finish in one sitting.')),
       h('div', { style: 'height: var(--s3)' }),
       zone,
+      paperQuota(),
     ),
     h(
       'aside',

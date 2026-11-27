@@ -8,7 +8,7 @@ const Anthropic = sdk.default ?? sdk;
 
 const PROVIDERS = {
   anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5', keyPattern: /^sk-ant-[\w-]{20,}$/, keyHint: 'It should start with sk-ant-.' },
-  gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen', keyPattern: /^[\w.-]{30,}$/, keyHint: 'Copy it from Google AI Studio.' },
+  gemini: { label: 'Google Gemini', model: 'gemini-3.5-flash-lite', modelName: 'Gemini 3.5 Flash-Lite', keyPattern: /^[\w.-]{30,}$/, keyHint: 'Copy it from Google AI Studio.' },
   openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol', keyPattern: /^sk-[\w-]{20,}$/, keyHint: 'It should start with sk-.' },
 };
 // Keys carry recognisable prefixes, so a key pasted under the wrong provider still works.
@@ -21,6 +21,21 @@ function detectProvider(key) {
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENAI = 'https://api.openai.com/v1';
+
+// US dollars per million tokens for the Gemini model above (paid tier, checked 27 November 2026).
+// Only used to write an estimate in the log; thinking is billed as output. Update with the model.
+const GEMINI_PRICE = { input: 0.3, cached: 0.03, output: 2.5 };
+
+function geminiUsage(u = {}) {
+  const input = u.promptTokenCount ?? 0;
+  const cached = u.cachedContentTokenCount ?? 0;
+  const answer = u.candidatesTokenCount ?? 0;
+  const thinking = u.thoughtsTokenCount ?? 0;
+  const dollars = ((input - cached) * GEMINI_PRICE.input + cached * GEMINI_PRICE.cached + (answer + thinking) * GEMINI_PRICE.output) / 1e6;
+  return { input, cached, answer, thinking, dollars };
+}
+let usageListener = () => {};
+const onUsage = (fn) => (usageListener = fn);
 
 let active = { provider: 'anthropic', key: null, client: null };
 function configure(provider, key) {
@@ -93,7 +108,8 @@ async function askGemini({ doc, task, schema, effort }) {
       maxOutputTokens: 32000,
       responseMimeType: 'application/json',
       responseJsonSchema: jsonSchema(schema),
-      thinkingConfig: { thinkingLevel: effort },
+      // This model's levels start one step lower than the others': minimal, low, medium. Thinking is billed as output.
+      thinkingConfig: { thinkingLevel: effort === 'medium' ? 'low' : 'minimal' },
     },
   };
   const r = await http('gemini', `${GEMINI}/models/${PROVIDERS.gemini.model}:generateContent`, {
@@ -101,6 +117,8 @@ async function askGemini({ doc, task, schema, effort }) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': active.key },
     body: JSON.stringify(body),
   });
+  // Recorded before any checks: a refused or cut-off reply is billed too.
+  usageListener(geminiUsage(r.usageMetadata));
   const c = r.candidates?.[0];
   if (r.promptFeedback?.blockReason || /SAFETY|BLOCKLIST|PROHIBITED|SPII/.test(c?.finishReason ?? '')) {
     throw new MarginError('REFUSAL', '{name} declined to work with this document.', { name: 'Gemini' });
@@ -402,4 +420,4 @@ function friendly(e) {
   return e?.message ? { code: 'UNKNOWN', message: e.message } : err('UNKNOWN', 'Something went wrong.');
 }
 
-module.exports = { configure, setLanguage, setLevelLength, LANGUAGES, verifyKey, detectProvider, outline, level, grade, friendly, MarginError, PROVIDERS };
+module.exports = { geminiUsage, onUsage, configure, setLanguage, setLevelLength, LANGUAGES, verifyKey, detectProvider, outline, level, grade, friendly, MarginError, PROVIDERS };

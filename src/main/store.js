@@ -11,7 +11,7 @@ const fresh = () => ({
   settings: {
     sound: true, motion: 'full', theme: 'system', provider: 'anthropic', keys: {}, language: 'en', dailyGoal: 60,
     readingSize: 'm', confidence: true, autoContinue: false, levelLength: 'standard',
-    reviewSize: 30, prepareAhead: true,
+    reviewSize: 30, prepareAhead: true, reminder: false,
   },
   profile: {
     xp: 0,
@@ -25,6 +25,11 @@ const fresh = () => ({
   },
   papers: [],
   cards: [],
+  removedCards: [],
+  // Using Margin without an account, and the papers counted that way.
+  guest: false,
+  guestPapers: [],
+  lastReminder: null,
   exams: [],
 });
 

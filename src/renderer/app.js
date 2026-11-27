@@ -10,8 +10,9 @@ import settings from './views/settings.js';
 import exams from './views/exams.js';
 import signin from './views/signin.js';
 import groups from './views/groups.js';
+import cards from './views/cards.js';
 
-const views = { welcome, library, paper, level, review, progress, settings, exams, signin, groups };
+const views = { welcome, library, paper, level, review, progress, settings, exams, signin, groups, cards };
 const FOCUS = new Set(['signin', 'welcome', 'level']);
 
 const S = { settings: null, key: null, profile: null, papers: [], providers: {}, languages: {}, route: { name: 'library' } };
@@ -24,7 +25,7 @@ const ctx = {
     S.route = route;
     render();
   },
-  // The first screen once signed in.
+  // The first screen once signed in, or after "Not now".
   enter() {
     ctx.go({ name: S.key.set ? 'library' : 'welcome' });
   },
@@ -88,8 +89,8 @@ const ctx = {
 };
 
 function render() {
-  // Checked here, in one place, so no route can be reached while signed out.
-  if (!S.account) S.route = { name: 'signin' };
+  // Checked here, in one place: nothing opens until someone has signed in or chosen "Not now".
+  if (!S.account && !S.guest) S.route = { name: 'signin' };
   const swap = () => {
     cleanup?.();
     cleanup = null;
@@ -114,7 +115,7 @@ function renderSidebar() {
     h(
       'button',
       {
-        'aria-current': S.route.name === name || (name === 'library' && S.route.name === 'paper') ? 'page' : null,
+        'aria-current': S.route.name === name || (name === 'library' && S.route.name === 'paper') || (name === 'review' && S.route.name === 'cards') ? 'page' : null,
         onclick: () => ctx.go({ name }),
       },
       iconEl(ic),
@@ -247,6 +248,8 @@ async function boot() {
   translateStatic();
   ctx.enter();
   window.margin.onUpdate(showUpdate);
+  // A clicked reminder opens Review, but never pulls someone out of a level or a practice test.
+  window.margin.onOpenReview(() => !['level', 'exams'].includes(S.route.name) && ctx.go({ name: 'review' }));
 }
 
 boot().catch((e) => {

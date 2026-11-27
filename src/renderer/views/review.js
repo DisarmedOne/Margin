@@ -1,4 +1,4 @@
-import { h, api, when, sound, toast, plain } from '../ui.js';
+import { h, iconEl, api, when, sound, toast, plain } from '../ui.js';
 import { t, tn } from '../i18n.js';
 
 const RATINGS = ['Again', 'Hard', 'Good', 'Easy'];
@@ -34,6 +34,8 @@ export default function review(root, S, ctx) {
     .then((cards) => alive && (cards.length ? session(cards) : empty()))
     .catch((e) => toast(e.message));
 
+  const createCards = () => h('button.btn.lg', { onclick: () => ctx.go({ name: 'cards' }) }, iconEl('plus'), t('Create your cards'));
+
   function empty() {
     const p = S.profile;
     keyHandler = null;
@@ -52,7 +54,7 @@ export default function review(root, S, ctx) {
               {},
               t('Finish a chapter and its key ideas land here, along with every question you missed or guessed. They come back a day later, then a week, then a month, each time just before you would forget.'),
             ),
-            h('div.row', { style: 'margin-top: var(--s3)' }, h('button.btn', { onclick: () => ctx.go({ name: 'library' }) }, t('Go to your library'))),
+            h('div.row', { style: 'margin-top: var(--s3)' }, h('button.btn', { onclick: () => ctx.go({ name: 'library' }) }, t('Go to your library')), createCards()),
           ),
           h(
             'aside',
@@ -73,6 +75,7 @@ export default function review(root, S, ctx) {
         'header.pagehead',
         {},
         h('div.stack', {}, h('p.label', {}, `${t('Review')} · ${tn(p.deckSize, '{n} card in your deck|{n} cards in your deck')}`), h('h1.h1', {}, t('All caught up.'))),
+        createCards(),
       ),
       h(
         'div.quiet-empty',
@@ -226,7 +229,12 @@ export default function review(root, S, ctx) {
     const counter = h('p.label');
     const host = h('div');
     page.replaceChildren(
-      h('header.pagehead', {}, h('div.stack', {}, h('p.label', {}, t('Review')), h('h1.h1', {}, tn(cards.length, '{n} card due|{n} cards due'))), counter),
+      h(
+        'header.pagehead',
+        {},
+        h('div.stack', {}, h('p.label', {}, t('Review')), h('h1.h1', {}, tn(cards.length, '{n} card due|{n} cards due'))),
+        h('div.stack', { style: 'text-align: right; --gap: var(--s2)' }, createCards(), counter),
+      ),
       host,
     );
 
@@ -266,8 +274,9 @@ export default function review(root, S, ctx) {
           h(
             'header',
             {},
-            h('span.label', {}, c.paperTitle.length > 60 ? `${c.paperTitle.slice(0, 58)}…` : c.paperTitle),
-            h('span.label', {}, t('Chapter {n}', { n: c.chapter + 1 })),
+            h('span.label', {}, c.paperTitle.length > 60 ? `${c.paperTitle.slice(0, 58)}…` : c.paperTitle || t('Your own card')),
+            // Cards the learner wrote belong to no chapter.
+            Number.isInteger(c.chapter) ? h('span.label', {}, t('Chapter {n}', { n: c.chapter + 1 })) : null,
           ),
           h('div.face', {}, h('p.q', {}, plain(c.front)), answer),
           footer,

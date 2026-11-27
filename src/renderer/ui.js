@@ -15,7 +15,7 @@ export const PROVIDER_COPY = {
     keyLabel: 'Gemini API key',
     placeholder: 'AIza…',
     console: 'Get a key from Google AI Studio',
-    note: 'Margin uses Gemini 4 Hydrogen. Google may charge you. In the EEA, Switzerland and the UK, Google’s terms require its paid service for apps like this. You must be 18 or over.',
+    note: 'Margin uses Gemini 3.5 Flash-Lite. Google may charge you. In the EEA, Switzerland and the UK, Google’s terms require its paid service for apps like this. You must be 18 or over.',
   },
   openai: {
     option: 'OpenAI',

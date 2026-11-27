@@ -8,16 +8,50 @@ let codeSentTo = null;
 // null, 'browser' (waiting for the user over there) or 'connecting' (fetching the session).
 let googleStep = null;
 
-// Shown before anything else until there is a signed-in account. Signing in is also how one is created.
+// The age box starts unticked. Kept here so redrawing the screen doesn't clear it.
+let adult = false;
+
+// Shown first until someone signs in or chooses "Not now". Signing in is also how an account is created.
 export default function signin(root, S, ctx) {
   const holder = h('div', { style: 'max-width: 420px' });
+
+  const skip = h(
+    'button.link.quiet',
+    {
+      type: 'button',
+      onclick: async () => {
+        if (!adult) return;
+        try {
+          S.guest = await api(window.margin.skipSignIn());
+          ctx.enter();
+        } catch (e) {
+          toast(e.message);
+        }
+      },
+    },
+    t('Not now'),
+  );
+  const ageBox = h('input', {
+    type: 'checkbox',
+    onchange: (e) => {
+      adult = e.target.checked;
+      lock();
+    },
+  });
+  ageBox.checked = adult;
+  // Signing in and "Not now" both wait for the age box.
+  const lock = () => {
+    for (const b of [...holder.querySelectorAll('[data-adult]'), skip]) b.disabled = !adult;
+  };
 
   const draw = () => {
     if (S.account) return ctx.enter();
     holder.replaceChildren(signInForm());
+    lock();
   };
 
   async function google() {
+    if (!adult) return;
     googleStep = 'browser';
     draw();
     // The wait can outlast this drawing of the screen (changing language redraws it).
@@ -63,7 +97,7 @@ export default function signin(root, S, ctx) {
     );
     const err = h('p.error-text', { role: 'alert' });
     const idle = asking ? t('Email me a code') : t('Sign in');
-    const btn = h('button.btn.sm', { type: 'submit' }, idle);
+    const btn = h('button.btn.sm', { type: 'submit', 'data-adult': '' }, idle);
 
     // Runs one request with the button locked, showing any problem under the field.
     const run = async (busy, work) => {
@@ -74,13 +108,14 @@ export default function signin(root, S, ctx) {
         await work();
       } catch (e) {
         err.textContent = e.message;
-        btn.disabled = false;
+        btn.disabled = !adult;
         btn.textContent = idle;
       }
     };
 
     const submit = (e) => {
       e.preventDefault();
+      if (!adult) return;
       if (asking) {
         run(t('Sending…'), async () => {
           codeSentTo = await api(window.margin.sendCode(input.value));
@@ -99,7 +134,7 @@ export default function signin(root, S, ctx) {
     return h(
       'form.field',
       { onsubmit: submit, novalidate: true },
-      asking ? h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick: google }, t('Continue with Google'))) : null,
+      asking ? h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick: google, 'data-adult': '' }, t('Continue with Google'))) : null,
       asking ? h('p.small', {}, t('Or use your email')) : null,
       asking ? null : h('p.small', { style: 'color: var(--ink)' }, t('Enter the code we sent to {email}.', { email: codeSentTo })),
       h('label.label', {}, label),
@@ -148,11 +183,13 @@ export default function signin(root, S, ctx) {
       {},
       h(
         'section.left',
-        { style: 'padding-top: var(--s8)' }, // keeps the privacy link in view at the smallest window size
+        { style: 'padding-top: var(--s5); padding-bottom: var(--s4); gap: var(--s3)' }, // keeps "Not now" and the privacy link in view at the smallest window size
         h('div.spread', { style: 'align-items: center; margin-bottom: var(--s5)' }, h('div.wordmark', { style: 'padding:0' }, h('b', {}, 'Margin'), h('i')), langPicker),
-        h('h1.display', { style: 'max-width: 12ch' }, t('Sign in to Margin')),
-        h('p.lede', {}, t('A free Steelfable account is needed to use Margin. New here? The same steps create one.')),
+        h('h1.h1', {}, t('Sign in to Margin')),
+        h('p.lede', {}, t('A free Steelfable account is optional, except for study groups. New here? The same steps create one.')),
+        h('label.agecheck', {}, ageBox, h('span', {}, t('I am 18 or older.'))),
         holder,
+        h('div', {}, skip),
         // Said before anyone gives an email address.
         h(
           'p.hint',

@@ -118,6 +118,7 @@ export default function settings(root, S, ctx) {
           err.textContent = '';
           try {
             S.account = await api(window.margin.deleteAccount());
+            S.guest = false;
             toast(t('Your account has been deleted.'));
             ctx.go({ name: 'signin' });
           } catch (e) {
@@ -133,13 +134,21 @@ export default function settings(root, S, ctx) {
       'div.stack',
       { style: '--gap: var(--s3)' },
       h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
-      h('p.small', {}, t('This permanently deletes your Steelfable account and cannot be undone. Your papers and progress stay on this computer.')),
+      h('p.small', {}, t('This permanently deletes your Steelfable account and cannot be undone. Your papers and progress stay on this computer. A scrambled record of your email and the papers you added is kept, so the paper limit still applies.')),
       err,
       h('div.row', {}, confirm, cancel),
     );
   }
 
   function accountBlock() {
+    if (!S.account) {
+      return h(
+        'div.stack',
+        { style: '--gap: var(--s3)' },
+        h('p.small', { style: 'color: var(--ink)' }, t('Not signed in.')),
+        h('div', {}, h('button.btn.sm.secondary', { onclick: () => ctx.go({ name: 'signin' }) }, t('Sign in'))),
+      );
+    }
     if (confirmingDelete) return deleteConfirm();
     return h(
       'div.stack',
@@ -154,6 +163,7 @@ export default function settings(root, S, ctx) {
             onclick: async () => {
               try {
                 S.account = await api(window.margin.signOut());
+                S.guest = false;
                 toast(t('Signed out.'));
                 ctx.go({ name: 'signin' });
               } catch (e) {
@@ -254,6 +264,14 @@ export default function settings(root, S, ctx) {
             [10, '10'],
             [30, '30'],
             [50, '50'],
+          ]),
+        ),
+        row(
+          t('Review reminder'),
+          t('A Windows notification, at most once a day, when cards are due. It only works while Margin is open or minimised.'),
+          seg('reminder', [
+            [false, t('Off')],
+            [true, t('On')],
           ]),
         ),
   ];

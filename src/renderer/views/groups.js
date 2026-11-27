@@ -312,7 +312,13 @@ export default function groups(root, S, ctx) {
         page.replaceChildren(head(t('Groups'), t('Study together.')), h('div.quiet-empty', {}, h('p.body', {}, e.message), h('button.btn', { onclick: load }, iconEl('retry'), t('Try again'))));
       });
   }
-  load();
+  if (S.account) load();
+  else {
+    page.replaceChildren(
+      head(t('Groups'), t('Study together.')),
+      h('div.quiet-empty', {}, h('p.body', {}, t('Sign in to use study groups.')), h('button.btn', { onclick: () => ctx.go({ name: 'signin' }) }, t('Sign in'))),
+    );
+  }
 
   return () => {
     alive = false;

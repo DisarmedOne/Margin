@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, nativeTheme, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, nativeTheme, Menu, Notification } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
@@ -11,9 +11,14 @@ const account = require('./account');
 const studyGroups = require('./groups');
 const { cardsCsv } = require('./cards-csv');
 const exam = require('./exam');
+const extract = require('./extract');
+const deck = require('./deck');
+const paperLimit = require('./limit');
 
 const MAX_BYTES = 30 * 1024 * 1024; // Claude's request limit is 32 MB including base64 overhead headroom
-const ACCEPTED = ['.pdf', '.docx', '.txt', '.md'];
+// Slide files are mostly pictures, which are not sent anywhere, so they may be much bigger.
+const MAX_PPTX_BYTES = 100 * 1024 * 1024;
+const ACCEPTED = ['.pdf', '.docx', '.pptx', '.html', '.htm', '.mhtml', '.mht', '.txt', '.md'];
 const BAR = { light: { color: '#F2EFE7', symbolColor: '#45423C' }, dark: { color: '#161513', symbolColor: '#BDB7AA' } };
 
 let win;
@@ -122,29 +127,63 @@ async function loadDoc(paper) {
   return { kind: 'text', data: await fs.readFile(path.join(dir, 'source.txt'), 'utf8') };
 }
 
+// Files that passed the check but have no place yet, so several added at once cannot all use the last one.
+const unclaimed = new Set();
+
+// One check at a time, so each one sees the reservations made before it.
+let reserving = Promise.resolve();
+function reserve(key) {
+  const run = reserving.then(async () => {
+    const known = await limiter().check(key, [...unclaimed].filter((k) => k !== key).length);
+    if (!known) unclaimed.add(key);
+  });
+  reserving = run.catch(() => {});
+  return run;
+}
+
+async function textOf(filePath, ext) {
+  if (ext === '.docx') return (await mammoth.extractRawText({ path: filePath })).value;
+  if (ext === '.pptx') {
+    try {
+      return await extract.readPptx(await fs.readFile(filePath));
+    } catch {
+      throw new ai.MarginError('TYPE', 'Could not open this PowerPoint file. Save it again as .pptx and retry.');
+    }
+  }
+  if (ext === '.html' || ext === '.htm') return extract.readHtml(await fs.readFile(filePath));
+  if (ext === '.mhtml' || ext === '.mht') return extract.readMhtml(await fs.readFile(filePath));
+  return fs.readFile(filePath, 'utf8');
+}
+
 async function addPaper(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (!ACCEPTED.includes(ext)) {
-    throw new ai.MarginError('TYPE', 'Margin reads PDF, Word (.docx), Markdown and plain text files.');
+    throw new ai.MarginError('TYPE', 'Margin reads PDF, Word (.docx), PowerPoint (.pptx), saved web pages, Markdown and plain text files.');
   }
   const stat = await fs.stat(filePath);
-  if (stat.size > MAX_BYTES) throw new ai.MarginError('TOO_BIG', 'This file is over 30 MB. Try a smaller copy.');
+  if (ext === '.pptx') {
+    if (stat.size > MAX_PPTX_BYTES) throw new ai.MarginError('TOO_BIG', 'This PowerPoint is over 100 MB. Try a smaller copy.');
+  } else if (stat.size > MAX_BYTES) throw new ai.MarginError('TOO_BIG', 'This file is over 30 MB. Try a smaller copy.');
 
   const id = crypto.randomUUID();
   const dir = store.paperDir(id);
   await fs.mkdir(dir, { recursive: true });
   let kind = 'pdf';
+  let fingerprint;
   try {
     if (ext === '.pdf') {
       await fs.copyFile(filePath, path.join(dir, 'source.pdf'));
+      fingerprint = paperLimit.fingerprint(await fs.readFile(path.join(dir, 'source.pdf')));
     } else {
       kind = 'text';
-      const text = ext === '.docx' ? (await mammoth.extractRawText({ path: filePath })).value : await fs.readFile(filePath, 'utf8');
+      const text = await textOf(filePath, ext);
       if (text.trim().length < 400) {
         throw new ai.MarginError('EMPTY', 'This file has almost no text in it. Margin needs at least a few paragraphs.');
       }
       await fs.writeFile(path.join(dir, 'source.txt'), text);
+      fingerprint = paperLimit.fingerprint(text);
     }
+    await reserve(fingerprint);
   } catch (e) {
     await fs.rm(dir, { recursive: true, force: true });
     throw e;
@@ -154,6 +193,7 @@ async function addPaper(filePath) {
     id,
     fileName: path.basename(filePath),
     kind,
+    fingerprint,
     addedAt: Date.now(),
     touchedAt: Date.now(),
     status: 'reading',
@@ -175,10 +215,18 @@ async function runOutline(paper) {
   paper.error = null;
   emit('paper', publicPaper(paper));
   try {
-    const doc = await loadDoc(paper);
-    paper.outline = await timed('outline', () => ai.outline(doc));
+    // An outline that is already there only still needs its place, so the AI is not paid twice.
+    if (!paper.outline) {
+      if (paper.fingerprint) await reserve(paper.fingerprint);
+      const doc = await loadDoc(paper);
+      paper.outline = await timed('outline', () => ai.outline(doc));
+    }
+    // The place is taken only now, so a paper that could not be read costs none.
+    if (paper.fingerprint) await limiter().claim(paper.fingerprint);
     paper.status = 'ready';
+    unclaimed.delete(paper.fingerprint);
   } catch (e) {
+    unclaimed.delete(paper.fingerprint);
     paper.status = 'error';
     const f = ai.friendly(e);
     paper.error = f.message;
@@ -188,7 +236,7 @@ async function runOutline(paper) {
   if (!S().papers.includes(paper)) return; // removed while reading
   await store.save();
   emit('paper', publicPaper(paper));
-  if (paper.status === 'ready') prefetchAll(paper);
+  if (paper.status === 'ready') prepareFirst(paper);
 }
 
 // One line per AI call in data/margin.log, so slow or failing calls can be diagnosed later.
@@ -206,17 +254,11 @@ async function timed(what, fn) {
   }
 }
 
-// Write every chapter's level in the background, in order, so the learner rarely waits.
-// Sequential rather than parallel to stay inside free-tier rate limits.
-async function prefetchAll(paper) {
-  for (let i = 0; i < paper.outline.chapters.length; i++) {
-    if (!S().papers.includes(paper) || !S().settings.prepareAhead) return;
-    try {
-      await getLevel(paper.id, i);
-    } catch {
-      return; // the learner sees the error, with a retry, when they open that chapter
-    }
-  }
+// Write only the first level ahead of time. Every level costs money, so the others are written
+// one step ahead of the learner (the paper and level screens ask for the next one), never all at once.
+function prepareFirst(paper) {
+  if (!S().settings.prepareAhead) return;
+  getLevel(paper.id, 0).catch(() => {}); // the learner sees the error, with a retry, when they open it
 }
 
 const inflight = new Map();
@@ -245,6 +287,7 @@ function upsertCard(paperId, chapter, key, front, back, dueNow) {
     if (dueNow) existing.due = Date.now();
     return 0;
   }
+  if (S().removedCards.includes(id)) return 0; // the learner deleted it, so replaying must not bring it back
   S().cards.push({ id, paperId, chapter, front, back, ease: 2.5, interval: 0, reps: 0, due: Date.now(), created: Date.now() });
   return 1;
 }
@@ -351,6 +394,93 @@ async function exportCards() {
     throw new ai.MarginError('SAVE', 'Could not save the file. Close it if it is open, or choose another folder.');
   }
   return S().cards.length;
+}
+
+// ---------- The learner's own cards ----------
+function deckView() {
+  const titles = Object.fromEntries(S().papers.map((p) => [p.id, p.outline?.title ?? p.fileName]));
+  const cards = [...S().cards]
+    .sort((a, b) => b.created - a.created)
+    .map((c) => ({ id: c.id, front: c.front, back: c.back, paperId: c.paperId, paperTitle: titles[c.paperId] ?? '' }));
+  return { cards, profile: profileView() };
+}
+
+async function saveCard(input) {
+  const text = deck.cardText(input);
+  if (!text) throw new ai.MarginError('CARD', 'A card needs a question and an answer.');
+  if (input.id) {
+    const card = S().cards.find((c) => c.id === input.id);
+    if (!card) throw new ai.MarginError('NOT_FOUND', 'That card is no longer in your deck.');
+    Object.assign(card, text); // keeps its review schedule
+  } else {
+    const paperId = S().papers.some((p) => p.id === input.paperId) ? input.paperId : null;
+    const now = Date.now();
+    S().cards.push({ id: `own:${crypto.randomUUID()}`, paperId, chapter: null, ...text, ease: 2.5, interval: 0, reps: 0, due: now, created: now });
+  }
+  await store.save();
+  return deckView();
+}
+
+async function removeCard(id) {
+  if (S().cards.some((c) => c.id === id)) {
+    S().cards = S().cards.filter((c) => c.id !== id);
+    if (!id.startsWith('own:')) S().removedCards.push(id);
+    await store.save();
+  }
+  return deckView();
+}
+
+// ---------- Review reminder ----------
+// Only while Margin is running. The wording comes from the same translation files as the window.
+async function translator() {
+  const code = S().settings.language;
+  if (code === 'en') return (key) => key;
+  try {
+    // The app is CommonJS, so the language file (an ES module) is loaded from its text.
+    const source = await fs.readFile(path.join(__dirname, '../renderer/locales', `${code}.js`), 'utf8');
+    const dict = (await import(`data:text/javascript,${encodeURIComponent(source)}`)).default;
+    return (key) => dict[key] ?? key;
+  } catch {
+    return (key) => key;
+  }
+}
+
+let reminder = null; // held so a click still works after this function returns
+async function remind() {
+  const today = srs.dayKey();
+  const wanted = deck.shouldRemind({
+    enabled: S().settings.reminder && Notification.isSupported(),
+    due: profileView().due,
+    lastDay: S().lastReminder,
+    today,
+    focused: win?.isFocused(),
+  });
+  if (!wanted) return;
+  S().lastReminder = today;
+  await store.save();
+  const t = await translator();
+  reminder = new Notification({ title: 'Margin', body: t('You have flashcards ready to review.') });
+  reminder.on('click', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    emit('open-review');
+  });
+  reminder.show();
+}
+
+// Windows only shows notifications from an app whose Start menu shortcut carries its id.
+function setNotificationId() {
+  const id = 'app.margin.study';
+  app.setAppUserModelId(app.isPackaged ? id : process.execPath);
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  const link = path.join(app.getPath('appData'), 'Microsoft/Windows/Start Menu/Programs/Margin.lnk');
+  try {
+    shell.writeShortcutLink(link, 'update', { target: process.execPath, appUserModelId: id });
+  } catch {
+    /* no shortcut to update */
+  }
 }
 
 // ---------- Exams ----------
@@ -485,6 +615,10 @@ async function accessToken() {
 }
 
 const groupsApi = studyGroups.client(accessToken, () => S().profile);
+const limitApi = paperLimit.client(accessToken);
+const guestLimit = paperLimit.local(() => S().guestPapers, () => store.save());
+// Signed in, the server counts; without an account, this computer does.
+const limiter = () => (S().account ? limitApi : guestLimit);
 
 // Remembers whether this account is in a group, so study numbers are only ever sent by someone who is.
 async function groupResult(work) {
@@ -519,6 +653,7 @@ async function accountDelete() {
     await store.save();
   });
   delete S().account;
+  S().guest = false;
   await store.save();
   return null;
 }
@@ -526,6 +661,7 @@ async function accountDelete() {
 async function accountSignOut() {
   const saved = S().account;
   delete S().account;
+  S().guest = false;
   await store.save();
   try {
     await account.signOut(readSession(saved));
@@ -549,8 +685,8 @@ function handle(channel, fn) {
 
 function registerIpc() {
   const publicSettings = () => {
-    const { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead } = S().settings;
-    return { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead };
+    const { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead, reminder } = S().settings;
+    return { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead, reminder };
   };
   handle('boot', () => ({
     settings: publicSettings(),
@@ -561,7 +697,13 @@ function registerIpc() {
     languages: ai.LANGUAGES,
     version: app.getVersion(),
     account: publicAccount(),
+    guest: S().guest,
   }));
+  handle('account:skip', async () => {
+    S().guest = true;
+    await store.save();
+    return true;
+  });
   handle('account:send', account.sendCode);
   handle('account:verify', accountVerify);
   handle('account:google', accountGoogle);
@@ -592,7 +734,7 @@ function registerIpc() {
     const allowed = {
       sound: 'boolean', motion: 'string', theme: 'string', language: 'string', dailyGoal: 'number',
       readingSize: 'string', confidence: 'boolean', autoContinue: 'boolean', levelLength: 'string',
-      reviewSize: 'number', prepareAhead: 'boolean',
+      reviewSize: 'number', prepareAhead: 'boolean', reminder: 'boolean',
     };
     for (const [k, v] of Object.entries(patch)) if (typeof v === allowed[k]) S().settings[k] = v;
     if ('motion' in patch) S().settings.motionChosen = true;
@@ -609,11 +751,12 @@ function registerIpc() {
     const r = await dialog.showOpenDialog(win, {
       title: 'Add a paper',
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Papers', extensions: ['pdf', 'docx', 'txt', 'md'] }],
+      filters: [{ name: 'Papers', extensions: ACCEPTED.map((e) => e.slice(1)) }],
     });
     return r.canceled ? [] : r.filePaths;
   });
   handle('papers:add', addPaper);
+  handle('papers:usage', () => limiter().usage());
   handle('papers:get', (id) => publicPaper(findPaper(id)));
   handle('papers:retry', (id) => {
     const p = findPaper(id);
@@ -623,6 +766,7 @@ function registerIpc() {
   handle('papers:remove', async (id) => {
     S().papers = S().papers.filter((p) => p.id !== id);
     S().cards = S().cards.filter((c) => c.paperId !== id);
+    S().removedCards = S().removedCards.filter((c) => !c.startsWith(`${id}:`));
     await store.save();
     await fs.rm(store.paperDir(id), { recursive: true, force: true });
     return profileView();
@@ -659,6 +803,9 @@ function registerIpc() {
   handle('exam:questions', (id) => exam.pickQuestions(findExam(id), S().papers));
   handle('exam:finish', finishExam);
   handle('cards:export', exportCards);
+  handle('cards:list', deckView);
+  handle('cards:save', saveCard);
+  handle('cards:remove', removeCard);
   handle('update:check', () => updater.check());
   handle('open:support', () => shell.openExternal('mailto:support@steelfable.com'));
   handle('open:website', () => shell.openExternal('https://steelfable.com/margin/'));
@@ -684,12 +831,18 @@ app.whenReady().then(async () => {
   ai.setLevelLength(st.levelLength);
   // Up to 1.3.0 motion followed Windows, which turns every animation off on PCs with animation effects disabled.
   if (st.motion === 'system' && !st.motionChosen) st.motion = 'full';
-  // Finish writing levels for papers that were read before Margin last closed.
-  for (const p of S().papers) if (p.status === 'ready' && readKey()) prefetchAll(p);
+  // One line per Gemini request in margin.log: real token counts and what they cost.
+  ai.onUsage((u) => {
+    const line = `${new Date().toISOString()} gemini usage input=${u.input} cached=${u.cached} answer=${u.answer} thinking=${u.thinking} cost=$${u.dollars.toFixed(4)}\n`;
+    fs.appendFile(path.join(store.root(), 'margin.log'), line).catch(() => {});
+  });
   registerIpc();
   nativeTheme.on('updated', paintTitleBar);
+  setNotificationId();
   createWindow();
   updater.start();
+  setTimeout(() => remind().catch(() => {}), 60e3);
+  setInterval(() => remind().catch(() => {}), 15 * 60e3);
   reportSoon(5e3);
 });
 

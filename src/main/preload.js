@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('margin', {
   setKey: (provider, key) => call('key:set', provider, key),
   useProvider: (provider) => call('provider:use', provider),
   setSettings: (patch) => call('settings:set', patch),
+  skipSignIn: () => call('account:skip'),
   sendCode: (email) => call('account:send', email),
   verifyCode: (email, code) => call('account:verify', email, code),
   signInWithGoogle: () => call('account:google'),
@@ -19,6 +20,7 @@ contextBridge.exposeInMainWorld('margin', {
   deleteAccount: () => call('account:delete'),
   pickFiles: () => call('papers:pick'),
   addPaper: (path) => call('papers:add', path),
+  paperUsage: () => call('papers:usage'),
   getPaper: (id) => call('papers:get', id),
   retryPaper: (id) => call('papers:retry', id),
   removePaper: (id) => call('papers:remove', id),
@@ -43,6 +45,13 @@ contextBridge.exposeInMainWorld('margin', {
   finishExam: (id, answers) => call('exam:finish', id, answers),
   rateCard: (cardId, rating) => call('review:rate', cardId, rating),
   cardPool: () => call('review:pool'),
+  listCards: () => call('cards:list'),
+  saveCard: (card) => call('cards:save', card),
+  removeCard: (id) => call('cards:remove', id),
+  onOpenReview: (cb) => {
+    ipcRenderer.removeAllListeners('open-review');
+    ipcRenderer.on('open-review', () => cb());
+  },
   finishLightning: (score) => call('review:lightning', score),
   profile: () => call('profile:get'),
   openConsole: (provider) => call('open:console', provider),

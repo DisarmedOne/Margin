@@ -90,11 +90,23 @@
     ],
   });
   window.margin = {
-    boot: async () => ok({ account: new URLSearchParams(location.search).get('auth') === '0' ? null : { email: 'reader@example.com' }, version: '1.8.0', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
+    boot: async () => ok({ account: new URLSearchParams(location.search).get('auth') === '0' ? null : { email: 'reader@example.com' }, version: '1.8.0', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-3.5-flash-lite', modelName: 'Gemini 3.5 Flash-Lite' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
     setKey: async (p, k) => { await wait(900); return k.length > 20 ? ok({ provider: p, set: true, last4: k.slice(-4), saved: { anthropic: true, gemini: p === 'gemini', openai: p === 'openai' } }) : { ok: false, error: { message: 'That does not look like a valid key.' } }; },
     useProvider: async (p) => ok({ provider: p, set: true, last4: 'abcd', saved: { anthropic: true, gemini: true, openai: false } }),
     setSettings: async (p) => ok({ ...Object.assign(mockSettings, p) }),
     cardPool: async () => ok([['What is the testing effect?','Recalling information strengthens memory more than restudying it.'],['What is the spacing effect?','Spreading study over time beats massing it in one session.'],['What is hypercorrection?','Confident errors are corrected more strongly than unsure ones.'],['What is interleaving?','Mixing related topics in one session improves later recall.'],['What did students predict?','That re-reading would work better than self-testing.']].map(([front, back], i) => ({ id: 'k' + i, front, back }))),
+    paperUsage: async () => ok({ used: papers.length, max: 5 }),
+    listCards: async () => ok({ cards: cards.map((c) => ({ ...c })), profile }),
+    saveCard: async (x) => {
+      if (!x.front.trim() || !x.back.trim()) return { ok: false, error: { message: 'A card needs a question and an answer.' } };
+      const i = cards.findIndex((c) => c.id === x.id);
+      if (i >= 0) cards[i] = { ...cards[i], front: x.front, back: x.back };
+      else cards.unshift({ id: 'own:' + cards.length, paperId: x.paperId || null, paperTitle: x.paperId ? outline.title : '', front: x.front, back: x.back, chapter: null, previewMs: [6e5, 864e5, 864e5, 3456e5] });
+      profile = { ...profile, deckSize: cards.length };
+      return ok({ cards: cards.map((c) => ({ ...c })), profile });
+    },
+    removeCard: async (id) => { cards.splice(cards.findIndex((c) => c.id === id), 1); profile = { ...profile, deckSize: cards.length }; return ok({ cards: cards.map((c) => ({ ...c })), profile }); },
+    onOpenReview: () => {},
     finishLightning: async (n) => ok({ profile, isBest: true }),
     listGroups: async () => ok(mockGroups),
     createGroup: async (x) => (!x.name.trim() || !x.display.trim() ? { ok: false, error: { message: 'Names need 1 to 24 characters, and group names up to 40.' } } : ok((mockGroups = [mockGroup(x.name, x.display, true, x.examDate, Number(x.goal))]))),
@@ -140,6 +152,7 @@
     onGoogleReturn: (cb) => { window.googleReturn = cb; },
     signInWithGoogle: () => new Promise((done) => { window.endGoogle = done; setTimeout(() => window.googleReturn?.(), 2000); setTimeout(() => done(ok({ email: 'reader@gmail.com' })), 6000); }),
     cancelGoogle: async () => { window.endGoogle?.({ ok: false, error: { code: 'CANCELLED', message: 'Google sign-in was cancelled.' } }); return ok(true); },
+    skipSignIn: async () => ok(true),
     signOut: async () => ok(null),
     deleteAccount: async () => { await wait(900); return new URLSearchParams(location.search).get('delfail') ? { ok: false, error: { message: 'Could not delete your account. Try again in a minute.' } } : ok(null); },
     openData: async () => ok(true),

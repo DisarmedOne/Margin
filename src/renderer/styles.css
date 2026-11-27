@@ -218,6 +218,10 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 .select option { background: var(--surface); color: var(--ink); }
 .link.quiet { color: var(--ink-3); font-size: var(--t-small); }
 .link.quiet:hover { color: var(--ink); }
+.link:disabled { opacity: 0.45; cursor: default; text-decoration-color: var(--rule); }
+.link.quiet:disabled:hover { color: var(--ink-3); }
+.agecheck { display: flex; align-items: center; gap: var(--s2); font-size: 14px; color: var(--ink); cursor: pointer; }
+.agecheck input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink); }
 .hint { font-size: var(--t-small); color: var(--ink-3); }
 .error-text { font-size: var(--t-small); color: var(--bad); }
 
@@ -272,6 +276,10 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 .segments i { flex: 1; height: 6px; background: var(--sunken); }
 .segments i.done { background: var(--ink); }
 .segments i.now { background: var(--accent); }
+.quota { display: grid; gap: var(--s2); max-width: 420px; padding: var(--s4) var(--s5); margin-bottom: var(--s6); border: 1px solid var(--rule-strong); background: var(--surface); }
+.quota .segments i { height: 10px; }
+.quota.full { border-color: var(--accent); }
+.quota.full .segments i.done { background: var(--accent); }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th { text-align: left; padding: 0 var(--s4) var(--s2) 0; border-bottom: 1px solid var(--rule-strong); }
@@ -576,6 +584,15 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 
 .setting-group { margin-top: var(--s6); padding-bottom: var(--s2); border-bottom: 1px solid var(--ink); }
 .setting-group:first-child { margin-top: 0; }
+
+/* ---------- own cards ---------- */
+.cardform { display: grid; gap: var(--s2); max-width: var(--read); padding: var(--s5); margin-bottom: var(--s6); border: 1px solid var(--rule); background: var(--surface); }
+.cardform .textarea { min-height: 72px; background: var(--bg); }
+.cardform .label { margin-top: var(--s2); }
+.cardform .row { margin-top: var(--s3); }
+.decksearch { max-width: 320px; margin-bottom: var(--s5); }
+.table td .cardback { margin-top: var(--s1); color: var(--ink-2); max-width: 62ch; overflow-wrap: anywhere; }
+.table td .ptitle { overflow-wrap: anywhere; }
 
 /* Arabic: every text element picks its own direction so sentences read right to left. */
 :root[lang='ar'] :is(p, h1, h2, h3, span, button, label, li, dd, dt, b, td, th, option) { unicode-bidi: plaintext; }
