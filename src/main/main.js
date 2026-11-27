@@ -9,6 +9,7 @@ const srs = require('./srs');
 const updater = require('./updater');
 const account = require('./account');
 const { cardsCsv } = require('./cards-csv');
+const exam = require('./exam');
 
 const MAX_BYTES = 30 * 1024 * 1024; // Claude's request limit is 32 MB including base64 overhead headroom
 const ACCEPTED = ['.pdf', '.docx', '.txt', '.md'];
@@ -235,6 +236,19 @@ function getLevel(paperId, index) {
   return inflight.get(key);
 }
 
+// Adds a review card, or brings an existing one forward. Returns how many were added.
+function upsertCard(paperId, chapter, key, front, back, dueNow) {
+  const id = `${paperId}:${chapter}:${key}`;
+  const existing = S().cards.find((c) => c.id === id);
+  if (existing) {
+    if (dueNow) existing.due = Date.now();
+    return 0;
+  }
+  S().cards.push({ id, paperId, chapter, front, back, ease: 2.5, interval: 0, reps: 0, due: Date.now(), created: Date.now() });
+  return 1;
+}
+const missedKey = (front) => `m${crypto.createHash('sha1').update(front).digest('hex').slice(0, 10)}`;
+
 async function completeLevel(paperId, index, result) {
   const paper = findPaper(paperId);
   const lv = paper.levels[index];
@@ -248,6 +262,8 @@ async function completeLevel(paperId, index, result) {
     total: result.total,
     bestCombo: Math.max(result.bestCombo || 0, prev?.bestCombo ?? 0),
     plays: (prev?.plays ?? 0) + 1,
+    // When it was first finished; the exam plan uses it to tick off today's chapters.
+    doneAt: prev?.done ? prev.doneAt : Date.now(),
   };
   paper.touchedAt = Date.now();
 
@@ -268,31 +284,20 @@ async function completeLevel(paperId, index, result) {
 
   // Flashcards from the level, plus every missed question, go into the review deck.
   let added = 0;
-  const upsert = (id, front, back, dueNow) => {
-    const existing = S().cards.find((c) => c.id === id);
-    if (existing) {
-      if (dueNow) existing.due = Date.now();
-      return;
-    }
-    S().cards.push({ id, paperId, chapter: index, front, back, ease: 2.5, interval: 0, reps: 0, due: Date.now(), created: Date.now() });
-    added++;
-  };
-  lv?.cards.forEach((c, i) => upsert(`${paperId}:${index}:c${i}`, c.front, c.back, false));
-  for (const m of result.missed || []) {
-    const h = crypto.createHash('sha1').update(m.front).digest('hex').slice(0, 10);
-    upsert(`${paperId}:${index}:m${h}`, m.front, m.back, true);
-  }
+  lv?.cards.forEach((c, i) => (added += upsertCard(paperId, index, `c${i}`, c.front, c.back, false)));
+  for (const m of result.missed || []) added += upsertCard(paperId, index, missedKey(m.front), m.front, m.back, true);
 
   await store.save();
   return { profile: profileView(), cardsAdded: added, rankUp: srs.rankFor(p.xp).name !== rankBefore ? srs.rankFor(p.xp).name : null };
 }
 
 // ---------- Review ----------
-function dueCards() {
+// paperIds narrows the session to one exam's papers.
+function dueCards(paperIds) {
   const now = Date.now();
   const titles = Object.fromEntries(S().papers.map((p) => [p.id, p.outline?.title ?? p.fileName]));
   return S()
-    .cards.filter((c) => c.due <= now)
+    .cards.filter((c) => c.due <= now && (!Array.isArray(paperIds) || paperIds.includes(c.paperId)))
     .sort((a, b) => a.due - b.due)
     .slice(0, S().settings.reviewSize)
     // Raw wait times per rating; the renderer words them in the learner's language.
@@ -343,6 +348,83 @@ async function exportCards() {
     throw new ai.MarginError('SAVE', 'Could not save the file. Close it if it is open, or choose another folder.');
   }
   return S().cards.length;
+}
+
+// ---------- Exams ----------
+const findExam = (id) => {
+  const e = S().exams.find((x) => x.id === id);
+  if (!e) throw new ai.MarginError('NOT_FOUND', 'That exam is no longer saved.');
+  return e;
+};
+
+function listExams() {
+  const now = Date.now();
+  return S()
+    .exams.map((e) => {
+      const paperIds = e.paperIds.filter((id) => S().papers.some((p) => p.id === id));
+      return {
+        id: e.id,
+        name: e.name,
+        date: e.date,
+        paperIds,
+        last: e.results.at(-1) ?? null,
+        ...exam.planFor(e, S().papers, now),
+        cardsDue: S().cards.filter((c) => c.due <= now && paperIds.includes(c.paperId)).length,
+        questions: exam.pickQuestions(e, S().papers).length,
+      };
+    })
+    // Coming exams first, soonest at the top; past ones after them.
+    .sort((a, b) => (a.days < 0) - (b.days < 0) || a.date.localeCompare(b.date));
+}
+
+async function saveExam(input) {
+  const name = String(input?.name ?? '').trim().slice(0, 80);
+  const date = String(input?.date ?? '');
+  const paperIds = S()
+    .papers.filter((p) => p.status === 'ready' && input?.paperIds?.includes(p.id))
+    .map((p) => p.id);
+  if (!name) throw new ai.MarginError('EXAM', 'Give the exam a name.');
+  if (!exam.validDate(date) || exam.daysUntil(date) < 0) throw new ai.MarginError('EXAM', 'Pick today or a later date.');
+  if (!paperIds.length) throw new ai.MarginError('EXAM', 'Choose at least one paper.');
+  let saved = input.id ? findExam(input.id) : null;
+  if (!saved) {
+    saved = { id: crypto.randomUUID(), results: [] };
+    S().exams.push(saved);
+  }
+  Object.assign(saved, { name, date, paperIds });
+  await store.save();
+  return saved.id;
+}
+
+async function removeExam(id) {
+  S().exams = S().exams.filter((e) => e.id !== id);
+  await store.save();
+  return true;
+}
+
+async function finishExam(id, answers) {
+  const e = findExam(id);
+  const valid = (Array.isArray(answers) ? answers : []).slice(0, exam.QUESTIONS).filter((a) => e.paperIds.includes(a.paperId) && Number.isInteger(a.ch));
+  const chapters = new Map();
+  for (const a of valid) {
+    const key = `${a.paperId}:${a.ch}`;
+    const c = chapters.get(key) ?? { paperId: a.paperId, ch: a.ch, right: 0, total: 0 };
+    c.total++;
+    if (a.right) c.right++;
+    else if (a.card?.front) upsertCard(a.paperId, a.ch, missedKey(String(a.card.front)), String(a.card.front), String(a.card.back), true);
+    chapters.set(key, c);
+  }
+  const byWeakness = [...chapters.values()].sort((a, b) => a.right / a.total - b.right / b.total);
+  const result = {
+    at: Date.now(),
+    right: valid.filter((a) => a.right).length,
+    total: valid.length,
+    weak: byWeakness.filter((c) => c.right < c.total).slice(0, 3),
+  };
+  e.results = [...e.results, result].slice(-10);
+  S().profile.streak = srs.touchStreak(S().profile.streak);
+  await store.save();
+  return { ...result, chapters: byWeakness };
 }
 
 // ---------- Steelfable account ----------
@@ -507,6 +589,11 @@ function registerIpc() {
   handle('profile:get', profileView);
   handle('open:console', (provider) => CONSOLES[provider] && shell.openExternal(CONSOLES[provider]));
   handle('open:data', () => shell.openPath(store.root()));
+  handle('exam:list', listExams);
+  handle('exam:save', saveExam);
+  handle('exam:remove', removeExam);
+  handle('exam:questions', (id) => exam.pickQuestions(findExam(id), S().papers));
+  handle('exam:finish', finishExam);
   handle('cards:export', exportCards);
   handle('update:check', () => updater.check());
   handle('open:support', () => shell.openExternal('mailto:support@steelfable.com'));

@@ -30,7 +30,7 @@ export default function review(root, S, ctx) {
 
   page.append(h('header.pagehead', {}, h('div.stack', {}, h('p.label', {}, t('Review')), h('div.skel.title', { style: 'width: 260px; height: 36px' }))));
 
-  api(window.margin.dueCards())
+  api(window.margin.dueCards(S.route.paperIds))
     .then((cards) => alive && (cards.length ? session(cards) : empty()))
     .catch((e) => toast(e.message));
 

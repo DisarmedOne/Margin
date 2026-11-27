@@ -79,13 +79,31 @@
     : [];
 
   let mockSettings;
+  let mockExams = [];
   window.margin = {
-    boot: async () => ok({ version: '1.5.6', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
+    boot: async () => ok({ version: '1.6.0', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
     setKey: async (p, k) => { await wait(900); return k.length > 20 ? ok({ provider: p, set: true, last4: k.slice(-4), saved: { anthropic: true, gemini: p === 'gemini', openai: p === 'openai' } }) : { ok: false, error: { message: 'That does not look like a valid key.' } }; },
     useProvider: async (p) => ok({ provider: p, set: true, last4: 'abcd', saved: { anthropic: true, gemini: true, openai: false } }),
     setSettings: async (p) => ok({ ...Object.assign(mockSettings, p) }),
     cardPool: async () => ok([['What is the testing effect?','Recalling information strengthens memory more than restudying it.'],['What is the spacing effect?','Spreading study over time beats massing it in one session.'],['What is hypercorrection?','Confident errors are corrected more strongly than unsure ones.'],['What is interleaving?','Mixing related topics in one session improves later recall.'],['What did students predict?','That re-reading would work better than self-testing.']].map(([front, back], i) => ({ id: 'k' + i, front, back }))),
     finishLightning: async (n) => ok({ profile, isBest: true }),
+    listExams: async () => ok(mockExams.map((e) => ({ ...e }))),
+    saveExam: async (x) => {
+      if (!x.name.trim()) return { ok: false, error: { message: 'Give the exam a name.' } };
+      if (!x.paperIds.length) return { ok: false, error: { message: 'Choose at least one paper.' } };
+      const days = Math.round((Date.parse(x.date) - Date.parse(day(0))) / DAY);
+      const e = { last: null, cardsDue: 2, questions: 4, total: 9, finished: 2, today: [{ paperId: 'p1', ch: 1, done: true }, { paperId: 'p1', ch: 2, done: false }, { paperId: 'p4', ch: 0, done: false }], ...x, days, id: x.id || 'e' + mockExams.length };
+      mockExams = [...mockExams.filter((m) => m.id !== e.id), e];
+      return ok(e.id);
+    },
+    removeExam: async (id) => { mockExams = mockExams.filter((m) => m.id !== id); return ok(true); },
+    examQuestions: async () => ok([...level.challenges.slice(0, 3), ...level.boss].map((q, i) => ({ ...q, paperId: 'p1', ch: i % 2 }))),
+    finishExam: async (id, a) => {
+      const chapters = [0, 1].map((ch) => ({ paperId: 'p1', ch, right: a.filter((x) => x.ch === ch && x.right).length, total: a.filter((x) => x.ch === ch).length }));
+      const r = { at: Date.now(), right: a.filter((x) => x.right).length, total: a.length, weak: chapters.filter((c) => c.right < c.total) };
+      mockExams = mockExams.map((m) => (m.id === id ? { ...m, last: r } : m));
+      return ok({ ...r, chapters });
+    },
     pickFiles: async () => ok([]),
     addPaper: async () => ok(papers[1]),
     getPaper: async (id) => ok(papers.find((p) => p.id === id)),
@@ -108,7 +126,7 @@
     deleteAccount: async () => { await wait(900); return new URLSearchParams(location.search).get('delfail') ? { ok: false, error: { message: 'Could not delete your account. Try again in a minute.' } } : ok(null); },
     openData: async () => ok(true),
     openPrivacy: async () => ok(true),
-    onUpdate: (cb) => { if (new URLSearchParams(location.search).get('update')) cb({ version: '1.5.7', current: '1.5.6' }); },
+    onUpdate: (cb) => { if (new URLSearchParams(location.search).get('update')) cb({ version: '1.6.1', current: '1.6.0' }); },
     checkUpdate: async () => { await wait(700); return ok({ status: 'current' }); },
     exportCards: async () => ok(profile.deckSize),
     openSupport: async () => ok(true),

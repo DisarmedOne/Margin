@@ -25,6 +25,7 @@ const fresh = () => ({
   },
   papers: [],
   cards: [],
+  exams: [],
 });
 
 const store = {

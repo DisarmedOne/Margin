@@ -7,8 +7,9 @@ import level from './views/level.js';
 import review from './views/review.js';
 import progress from './views/progress.js';
 import settings from './views/settings.js';
+import exams from './views/exams.js';
 
-const views = { welcome, library, paper, level, review, progress, settings };
+const views = { welcome, library, paper, level, review, progress, settings, exams };
 const FOCUS = new Set(['welcome', 'level']);
 
 const S = { settings: null, key: null, profile: null, papers: [], providers: {}, languages: {}, route: { name: 'library' } };
@@ -126,6 +127,7 @@ function renderSidebar() {
       { 'aria-label': t('Main') },
       navItem('library', t('Library'), 'library'),
       navItem('review', t('Review'), 'review', p.due),
+      navItem('exams', t('Exams'), 'exams'),
       navItem('progress', t('Progress'), 'progress'),
       navItem('settings', t('Settings'), 'settings'),
     ),

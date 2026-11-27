@@ -23,7 +23,10 @@ const words = (s) => {
 };
 
 export default function level(root, S, ctx) {
-  const { id, ch } = S.route;
+  const { id, ch, exam } = S.route;
+  // A level opened from an exam plan leads back to that plan.
+  const home = exam ? { name: 'exams', id: exam } : { name: 'paper', id };
+  const homeLabel = () => (exam ? t('Back to the plan') : t('Back to the route'));
   const paper = S.papers.find((p) => p.id === id);
   if (!paper || paper.status !== 'ready') {
     queueMicrotask(() => ctx.go({ name: 'library' }));
@@ -85,7 +88,7 @@ export default function level(root, S, ctx) {
   let armed = false;
   function leave() {
     const started = game.total > 0 || stage > 0;
-    if (!started || stage === 99 || armed) return ctx.go({ name: 'paper', id });
+    if (!started || stage === 99 || armed) return ctx.go(home);
     armed = true;
     leaveText.textContent = t('Leave? This run is lost');
     leaveBtn.classList.replace('ghost', 'danger');
@@ -243,7 +246,7 @@ export default function level(root, S, ctx) {
         'div.actions',
         {},
         h('button.btn', { onclick: run }, iconEl('retry'), t('Try again')),
-        h('button.btn.secondary', { onclick: () => ctx.go({ name: 'paper', id }) }, t('Back to the route')),
+        h('button.btn.secondary', { onclick: () => ctx.go(home) }, homeLabel()),
       ),
     );
   }
@@ -564,7 +567,7 @@ export default function level(root, S, ctx) {
       ctx.upsertPaper(await api(window.margin.getPaper(id)));
     } catch (e) {
       toast(t('Progress could not be saved: {error}', { error: e.message }));
-      return ctx.go({ name: 'paper', id });
+      return ctx.go(home);
     }
     if (!alive) return;
     ctx.setProfile(res.profile);
@@ -600,7 +603,7 @@ export default function level(root, S, ctx) {
           h(
             'div.row',
             { style: 'margin-top: var(--s2)' },
-            continueButton(t('Back to library'), () => ctx.go({ name: 'library' })),
+            continueButton(exam ? homeLabel() : t('Back to library'), () => ctx.go(exam ? home : { name: 'library' })),
             p.due ? h('button.btn.secondary', { onclick: () => ctx.go({ name: 'review' }) }, tn(p.due, 'Review {n} card|Review {n} cards')) : null,
           ),
         )
@@ -613,8 +616,11 @@ export default function level(root, S, ctx) {
           h(
             'div.row',
             { style: 'margin-top: var(--s2)' },
-            continueButton(t('Start chapter {n}', { n: ch + 2 }), () => ctx.go({ name: 'level', id, ch: ch + 1 })),
-            h('button.btn.secondary', { onclick: () => ctx.go({ name: 'paper', id }) }, t('Back to the route')),
+            // From an exam plan, the plan decides what comes next, so going back to it is the main button.
+            exam ? continueButton(homeLabel(), () => ctx.go(home)) : continueButton(t('Start chapter {n}', { n: ch + 2 }), () => ctx.go({ name: 'level', id, ch: ch + 1 })),
+            exam
+              ? h('button.btn.secondary', { onclick: () => ctx.go({ name: 'level', id, ch: ch + 1, exam }) }, t('Start chapter {n}', { n: ch + 2 }))
+              : h('button.btn.secondary', { onclick: () => ctx.go(home) }, homeLabel()),
           ),
         );
     const enter = keyHandler;
