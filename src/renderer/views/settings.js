@@ -197,6 +197,7 @@ export default function settings(root, S, ctx) {
           t('New levels are written by this model.'),
           h('p.num.small', { style: 'color: var(--ink)' }, `${S.providers[S.key.provider].modelName} · ${S.providers[S.key.provider].model}`),
         ),
+        h('p.small.num.muted', {}, `Margin ${S.version}`),
       ),
     );
   }

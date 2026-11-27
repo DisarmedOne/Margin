@@ -351,6 +351,7 @@ function registerIpc() {
     papers: S().papers.map(publicPaper),
     providers: providerList(),
     languages: ai.LANGUAGES,
+    version: app.getVersion(),
   }));
   handle('review:pool', () => {
     // Random cards for the lightning round; scheduling is untouched.
