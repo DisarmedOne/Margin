@@ -80,13 +80,31 @@
 
   let mockSettings;
   let mockExams = [];
+  let mockGroups = [];
+  const mockGroup = (name, display, owner, examDate, goal) => ({
+    id: 'g1', name, code: 'K7MPQ2XD', examDate: examDate || null, days: examDate ? 12 : null, weeklyGoal: goal || 1000, owner, weekXp: 610,
+    members: [
+      { id: 'm1', name: display, owner, me: true, weekXp: 270, streak: 4, today: true },
+      { id: 'm2', name: 'Noor', owner: !owner, me: false, weekXp: 340, streak: 9, today: true },
+      { id: 'm3', name: 'Sem', owner: false, me: false, weekXp: 0, streak: 0, today: false },
+    ],
+  });
   window.margin = {
-    boot: async () => ok({ account: new URLSearchParams(location.search).get('auth') === '0' ? null : { email: 'reader@example.com' }, version: '1.7.0', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
+    boot: async () => ok({ account: new URLSearchParams(location.search).get('auth') === '0' ? null : { email: 'reader@example.com' }, version: '1.8.0', languages: { en: 'English', es: 'Spanish', fr: 'French', de: 'German', nl: 'Dutch', pt: 'Portuguese', it: 'Italian', ru: 'Russian', zh: 'Simplified Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi', tr: 'Turkish', pl: 'Polish' }, settings: mockSettings = { reviewSize: 30, prepareAhead: true, language: new URLSearchParams(location.search).get('lang') || 'en', dailyGoal: 60, readingSize: 'm', confidence: new URLSearchParams(location.search).get('conf') !== '0', autoContinue: new URLSearchParams(location.search).get('auto') === '1', levelLength: 'standard', sound: false, motion: 'full', theme: new URLSearchParams(location.search).get('t') || 'system' }, key: { provider: 'anthropic', set: s !== 'nokey', last4: 'Q7xk', saved: { anthropic: s !== 'nokey', gemini: false, openai: false } }, profile, papers, providers: { anthropic: { label: 'Anthropic', model: 'claude-opus-5-5', modelName: 'Claude Opus 5.5' }, gemini: { label: 'Google Gemini', model: 'gemini-4-hydrogen', modelName: 'Gemini 4 Hydrogen' }, openai: { label: 'OpenAI', model: 'gpt-6.2-sol', modelName: 'GPT-6.2 Sol' } } }),
     setKey: async (p, k) => { await wait(900); return k.length > 20 ? ok({ provider: p, set: true, last4: k.slice(-4), saved: { anthropic: true, gemini: p === 'gemini', openai: p === 'openai' } }) : { ok: false, error: { message: 'That does not look like a valid key.' } }; },
     useProvider: async (p) => ok({ provider: p, set: true, last4: 'abcd', saved: { anthropic: true, gemini: true, openai: false } }),
     setSettings: async (p) => ok({ ...Object.assign(mockSettings, p) }),
     cardPool: async () => ok([['What is the testing effect?','Recalling information strengthens memory more than restudying it.'],['What is the spacing effect?','Spreading study over time beats massing it in one session.'],['What is hypercorrection?','Confident errors are corrected more strongly than unsure ones.'],['What is interleaving?','Mixing related topics in one session improves later recall.'],['What did students predict?','That re-reading would work better than self-testing.']].map(([front, back], i) => ({ id: 'k' + i, front, back }))),
     finishLightning: async (n) => ok({ profile, isBest: true }),
+    listGroups: async () => ok(mockGroups),
+    createGroup: async (x) => (!x.name.trim() || !x.display.trim() ? { ok: false, error: { message: 'Names need 1 to 24 characters, and group names up to 40.' } } : ok((mockGroups = [mockGroup(x.name, x.display, true, x.examDate, Number(x.goal))]))),
+    joinGroup: async (code, display) => (code.replace(/[^a-z0-9]/gi, '').toUpperCase() !== 'K7MPQ2XD' ? { ok: false, error: { message: 'No group has that code. Check it with the person who sent it.' } } : ok((mockGroups = [mockGroup('Psych study crew', display, false, day(-12), 1500)]))),
+    updateGroup: async (id, x) => ok((mockGroups = mockGroups.map((g) => ({ ...g, name: x.name, examDate: x.examDate || null, weeklyGoal: Number(x.goal), days: x.examDate ? Math.round((Date.parse(x.examDate) - Date.parse(day(0))) / DAY) : null })))),
+    renameInGroup: async (id, name) => ok((mockGroups = mockGroups.map((g) => ({ ...g, members: g.members.map((m) => (m.me ? { ...m, name } : m)) })))),
+    leaveGroup: async () => ok((mockGroups = [])),
+    removeGroupMember: async (id, member) => ok((mockGroups = mockGroups.map((g) => ({ ...g, code: 'NEWC4DE9', members: g.members.filter((m) => m.id !== member) })))),
+    replaceGroupCode: async () => ok((mockGroups = mockGroups.map((g) => ({ ...g, code: 'FRESH234' })))),
+    deleteGroup: async () => ok((mockGroups = [])),
     listExams: async () => ok(mockExams.map((e) => ({ ...e }))),
     saveExam: async (x) => {
       if (!x.name.trim()) return { ok: false, error: { message: 'Give the exam a name.' } };
@@ -126,7 +144,8 @@
     deleteAccount: async () => { await wait(900); return new URLSearchParams(location.search).get('delfail') ? { ok: false, error: { message: 'Could not delete your account. Try again in a minute.' } } : ok(null); },
     openData: async () => ok(true),
     openPrivacy: async () => ok(true),
-    onUpdate: (cb) => { if (new URLSearchParams(location.search).get('update')) cb({ version: '1.7.1', current: '1.7.0' }); },
+    openTerms: async () => ok(true),
+    onUpdate: (cb) => { if (new URLSearchParams(location.search).get('update')) cb({ version: '1.8.1', current: '1.8.0' }); },
     checkUpdate: async () => { await wait(700); return ok({ status: 'current' }); },
     exportCards: async () => ok(profile.deckSize),
     openSupport: async () => ok(true),

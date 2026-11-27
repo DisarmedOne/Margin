@@ -27,6 +27,15 @@ contextBridge.exposeInMainWorld('margin', {
   completeLevel: (id, index, result) => call('level:complete', id, index, result),
   gradeTeachBack: (id, index, prompt, answer) => call('teach:grade', id, index, prompt, answer),
   dueCards: (paperIds) => call('review:due', paperIds),
+  listGroups: () => call('groups:list'),
+  createGroup: (input) => call('groups:create', input),
+  joinGroup: (code, display) => call('groups:join', code, display),
+  updateGroup: (id, input) => call('groups:update', id, input),
+  renameInGroup: (id, display) => call('groups:rename', id, display),
+  leaveGroup: (id) => call('groups:leave', id),
+  removeGroupMember: (id, member) => call('groups:remove-member', id, member),
+  replaceGroupCode: (id) => call('groups:code', id),
+  deleteGroup: (id) => call('groups:delete', id),
   listExams: () => call('exam:list'),
   saveExam: (exam) => call('exam:save', exam),
   removeExam: (id) => call('exam:remove', id),
@@ -39,6 +48,7 @@ contextBridge.exposeInMainWorld('margin', {
   openConsole: (provider) => call('open:console', provider),
   openData: () => call('open:data'),
   openPrivacy: () => call('open:privacy'),
+  openTerms: () => call('open:terms'),
   onUpdate: (cb) => {
     ipcRenderer.on('update-ready', (_e, update) => cb(update));
     call('update:pending').then((r) => r.ok && r.data && cb(r.data));

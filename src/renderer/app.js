@@ -9,8 +9,9 @@ import progress from './views/progress.js';
 import settings from './views/settings.js';
 import exams from './views/exams.js';
 import signin from './views/signin.js';
+import groups from './views/groups.js';
 
-const views = { welcome, library, paper, level, review, progress, settings, exams, signin };
+const views = { welcome, library, paper, level, review, progress, settings, exams, signin, groups };
 const FOCUS = new Set(['signin', 'welcome', 'level']);
 
 const S = { settings: null, key: null, profile: null, papers: [], providers: {}, languages: {}, route: { name: 'library' } };
@@ -135,6 +136,7 @@ function renderSidebar() {
       navItem('library', t('Library'), 'library'),
       navItem('review', t('Review'), 'review', p.due),
       navItem('exams', t('Exams'), 'exams'),
+      navItem('groups', t('Groups'), 'groups'),
       navItem('progress', t('Progress'), 'progress'),
       navItem('settings', t('Settings'), 'settings'),
     ),

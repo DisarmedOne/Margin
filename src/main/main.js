@@ -8,6 +8,7 @@ const ai = require('./ai');
 const srs = require('./srs');
 const updater = require('./updater');
 const account = require('./account');
+const studyGroups = require('./groups');
 const { cardsCsv } = require('./cards-csv');
 const exam = require('./exam');
 
@@ -288,6 +289,7 @@ async function completeLevel(paperId, index, result) {
   for (const m of result.missed || []) added += upsertCard(paperId, index, missedKey(m.front), m.front, m.back, true);
 
   await store.save();
+  reportSoon();
   return { profile: profileView(), cardsAdded: added, rankUp: srs.rankFor(p.xp).name !== rankBefore ? srs.rankFor(p.xp).name : null };
 }
 
@@ -315,6 +317,7 @@ async function rateCard(id, rating) {
   p.daily[today] = (p.daily[today] || 0) + (rating === 0 ? 1 : 3);
   p.streak = srs.touchStreak(p.streak);
   await store.save();
+  reportSoon();
   return profileView();
 }
 
@@ -424,6 +427,7 @@ async function finishExam(id, answers) {
   e.results = [...e.results, result].slice(-10);
   S().profile.streak = srs.touchStreak(S().profile.streak);
   await store.save();
+  reportSoon();
   return { ...result, chapters: byWeakness };
 }
 
@@ -450,6 +454,55 @@ async function accountGoogle() {
 }
 
 const readSession = (saved) => JSON.parse(safeStorage.decryptString(Buffer.from(saved.session, 'base64')));
+
+// ---------- Study groups ----------
+// Renewing replaces the saved sign-in, so only one renewal may run at a time.
+let renewing = null;
+async function accessToken() {
+  const saved = S().account;
+  if (!saved) throw new ai.MarginError('SIGNIN', 'Your sign-in has expired. Sign out, then sign in again.');
+  let session;
+  try {
+    session = readSession(saved);
+  } catch {
+    throw new ai.MarginError('SIGNIN', 'Your sign-in has expired. Sign out, then sign in again.');
+  }
+  if (session.expires_at * 1000 > Date.now() + 60e3) return session.access_token;
+  renewing ??= (async () => {
+    try {
+      const fresh = await account.refresh(session);
+      saved.session = safeStorage.encryptString(JSON.stringify(fresh)).toString('base64');
+      await store.save();
+      return fresh.access_token;
+    } catch (e) {
+      if (e.code === 'OFFLINE' || e.code === 'SERVER' || e.code === 'RATE') throw e;
+      throw new ai.MarginError('SIGNIN', 'Your sign-in has expired. Sign out, then sign in again.');
+    } finally {
+      renewing = null;
+    }
+  })();
+  return renewing;
+}
+
+const groupsApi = studyGroups.client(accessToken, () => S().profile);
+
+// Remembers whether this account is in a group, so study numbers are only ever sent by someone who is.
+async function groupResult(work) {
+  const list = await work;
+  if (S().account) {
+    S().account.inGroups = list.length > 0;
+    await store.save();
+  }
+  return list;
+}
+
+// After studying, send fresh numbers quietly a little later. A failure only means they arrive next time.
+let reportTimer = null;
+function reportSoon(delay = 20e3) {
+  clearTimeout(reportTimer);
+  if (!S().account?.inGroups) return;
+  reportTimer = setTimeout(() => groupsApi.report().catch(() => {}), delay);
+}
 
 // The local sign-in is only removed once the server has confirmed the account is gone.
 async function accountDelete() {
@@ -530,6 +583,7 @@ function registerIpc() {
     p.daily[today] = (p.daily[today] || 0) + n * 2;
     if (n) p.streak = srs.touchStreak(p.streak);
     await store.save();
+    reportSoon();
     return { profile: profileView(), isBest };
   });
   handle('key:set', setKey);
@@ -589,6 +643,16 @@ function registerIpc() {
   handle('profile:get', profileView);
   handle('open:console', (provider) => CONSOLES[provider] && shell.openExternal(CONSOLES[provider]));
   handle('open:data', () => shell.openPath(store.root()));
+  const group = (channel, name) => handle(channel, (...args) => groupResult(groupsApi[name](...args)));
+  group('groups:list', 'list');
+  group('groups:create', 'create');
+  group('groups:join', 'join');
+  group('groups:update', 'update');
+  group('groups:rename', 'rename');
+  group('groups:leave', 'leave');
+  group('groups:remove-member', 'removeMember');
+  group('groups:code', 'replaceCode');
+  group('groups:delete', 'remove');
   handle('exam:list', listExams);
   handle('exam:save', saveExam);
   handle('exam:remove', removeExam);
@@ -600,6 +664,7 @@ function registerIpc() {
   handle('open:website', () => shell.openExternal('https://steelfable.com/margin/'));
   handle('update:pending', () => updater.pending());
   handle('update:install', () => updater.install());
+  handle('open:terms', () => shell.openExternal('https://steelfable.com/terms/'));
   handle('open:privacy', () => shell.openExternal('https://steelfable.com/privacy/'));
 }
 
@@ -625,6 +690,7 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated', paintTitleBar);
   createWindow();
   updater.start();
+  reportSoon(5e3);
 });
 
 app.on('window-all-closed', () => app.quit());

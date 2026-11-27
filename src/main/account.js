@@ -60,6 +60,9 @@ const signedIn = (r, email) => ({
   session: { access_token: r.access_token, refresh_token: r.refresh_token, expires_at: r.expires_at },
 });
 
+// A new session from the saved one. The old refresh token stops working, so the result must be saved.
+const refresh = async (session) => signedIn(await post('token?grant_type=refresh_token', { refresh_token: session.refresh_token }), '').session;
+
 // ---------- Google ----------
 // Google runs in the user's own browser, which then returns to a one-off server on this computer (PKCE flow).
 // This exact address has to be on the project's list of allowed redirect URLs.
@@ -150,4 +153,4 @@ async function signOut(session) {
   }
 }
 
-module.exports = { sendCode, verifyCode, signInWithGoogle, cancelGoogle, signOut, deleteAccount };
+module.exports = { PROJECT, KEY, refresh, sendCode, verifyCode, signInWithGoogle, cancelGoogle, signOut, deleteAccount };

@@ -98,6 +98,7 @@ const svg = (body, extra = '') =>
 
 export const icon = {
   library: svg('<path d="M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.5 1-4 15-3.5-1"/>'),
+  groups: svg('<path d="M3 20v-2a6 6 0 0 1 12 0v2M15.5 12.5A5 5 0 0 1 21 17.5V20"/><rect x="6" y="4" width="6" height="6"/><rect x="15" y="6" width="4" height="4"/>'),
   exams: svg('<path d="M4 6h16v14H4zM4 10.5h16M8.5 3v5M15.5 3v5"/>'),
   review: svg('<rect x="3" y="7" width="14" height="13"/><path d="M7 4h14v13"/>'),
   progress: svg('<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>'),
