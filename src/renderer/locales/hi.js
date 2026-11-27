@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '“{title}” पूरा हुआ।',
   'Account': 'खाता',
   'Steelfable account': 'Steelfable खाता',
-  'Optional for now. Your papers and progress stay on this computer.': 'अभी यह वैकल्पिक है। आपके दस्तावेज़ और प्रगति इसी कंप्यूटर पर रहते हैं।',
   'Email address': 'ईमेल पता',
   'Email me a code': 'मुझे कोड ईमेल करें',
   'Sending…': 'भेजा जा रहा है…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': { one: '{n} अध्याय', other: '{n} अध्याय' },
   '{n} day to go|{n} days to go': { one: '{n} दिन बाकी', other: '{n} दिन बाकी' },
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': { one: 'पूरे किए अध्यायों से {n} मिला-जुला सवाल।', other: 'पूरे किए अध्यायों से {n} मिले-जुले सवाल।' },
+  'Sign in to Margin': 'Margin में साइन इन करें',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'Margin इस्तेमाल करने के लिए मुफ़्त Steelfable खाता ज़रूरी है। नए हैं? इन्हीं चरणों से खाता बन जाता है।',
+  'For people aged 18 and over.': '18 साल या उससे अधिक उम्र के लोगों के लिए।',
+  'Your papers and progress stay on this computer.': 'आपके पेपर और प्रगति इसी कंप्यूटर पर रहते हैं।',
 };

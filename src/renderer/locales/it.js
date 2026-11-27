@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '{title}: fatto.',
   'Account': 'Account',
   'Steelfable account': 'Account Steelfable',
-  'Optional for now. Your papers and progress stay on this computer.': 'Per ora è facoltativo. I tuoi documenti e i progressi restano su questo computer.',
   'Email address': 'Indirizzo email',
   'Email me a code': 'Inviami un codice',
   'Sending…': 'Invio in corso…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': { one: '{n} capitolo', other: '{n} capitoli' },
   '{n} day to go|{n} days to go': { one: 'Manca {n} giorno', other: 'Mancano {n} giorni' },
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': { one: '{n} domanda mista dai capitoli completati.', other: '{n} domande miste dai capitoli completati.' },
+  'Sign in to Margin': 'Accedi a Margin',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'Per usare Margin serve un account Steelfable gratuito. Sei nuovo? Con gli stessi passaggi lo crei.',
+  'For people aged 18 and over.': 'Per chi ha almeno 18 anni.',
+  'Your papers and progress stay on this computer.': 'I tuoi documenti e i tuoi progressi restano su questo computer.',
 };

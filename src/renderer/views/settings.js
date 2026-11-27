@@ -1,10 +1,6 @@
 import { h, api, toast, iconEl, PROVIDER_COPY } from '../ui.js';
 import { t } from '../i18n.js';
 
-// The address a code was sent to. Kept here so leaving Settings doesn't lose the code step.
-let codeSentTo = null;
-// null, 'browser' (waiting for the user over there) or 'connecting' (fetching the session).
-let googleStep = null;
 // The open section, kept so leaving Settings and coming back lands in the same place.
 let tab = 'account';
 // Result of the last "Check for updates", shown under the button.
@@ -109,28 +105,6 @@ export default function settings(root, S, ctx) {
     return wrap;
   }
 
-  async function google() {
-    googleStep = 'browser';
-    draw();
-    // The wait can outlast this screen; redraw whichever Settings screen is showing now.
-    const refresh = () => {
-      if (page.isConnected) draw();
-      else if (S.route.name === 'settings') ctx.go(S.route);
-    };
-    window.margin.onGoogleReturn(() => {
-      googleStep = 'connecting';
-      refresh();
-    });
-    try {
-      S.account = await api(window.margin.signInWithGoogle());
-      codeSentTo = null;
-    } catch (e) {
-      if (e.code !== 'CANCELLED') toast(e.message);
-    }
-    googleStep = null;
-    refresh();
-  }
-
   // Deleting can't be undone, so it takes a second, clearly worded click.
   function deleteConfirm() {
     const err = h('p.error-text', { role: 'alert' });
@@ -145,8 +119,7 @@ export default function settings(root, S, ctx) {
           try {
             S.account = await api(window.margin.deleteAccount());
             toast(t('Your account has been deleted.'));
-            confirmingDelete = false;
-            draw();
+            ctx.go({ name: 'signin' });
           } catch (e) {
             err.textContent = e.message;
             confirm.disabled = cancel.disabled = false;
@@ -167,121 +140,31 @@ export default function settings(root, S, ctx) {
   }
 
   function accountBlock() {
-    if (S.account && confirmingDelete) return deleteConfirm();
-    if (S.account) {
-      return h(
-        'div.stack',
-        { style: '--gap: var(--s3)' },
-        h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
-        h(
-          'div.row',
-          {},
-          h(
-            'button.btn.sm.secondary',
-            {
-              onclick: async () => {
-                try {
-                  S.account = await api(window.margin.signOut());
-                  toast(t('Signed out.'));
-                  draw();
-                } catch (e) {
-                  toast(e.message);
-                }
-              },
-            },
-            t('Sign out'),
-          ),
-          h('button.link.quiet', { onclick: () => { confirmingDelete = true; draw(); } }, t('Delete account')),
-        ),
-      );
-    }
-
-    if (googleStep === 'connecting') {
-      return h('div.connecting', { role: 'status' }, h('p.small', {}, t('Connecting…')), h('div.connecting-bar', { 'aria-hidden': 'true' }, h('i')));
-    }
-
-    if (googleStep === 'browser') {
-      return h(
-        'div.stack',
-        { style: '--gap: var(--s3)' },
-        h('p.small', { style: 'color: var(--ink)', role: 'status' }, t('Finish signing in with Google in your browser.')),
-        h('div', {}, h('button.btn.sm.secondary', { onclick: () => window.margin.cancelGoogle() }, t('Cancel'))),
-      );
-    }
-
-    const asking = !codeSentTo;
-    const label = asking ? t('Email address') : t('Sign-in code');
-    const input = h(
-      'input.input',
-      asking
-        ? { type: 'email', autocomplete: 'email', placeholder: 'name@example.com', 'aria-label': label }
-        : { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '12', 'aria-label': label },
-    );
-    const err = h('p.error-text', { role: 'alert' });
-    const idle = asking ? t('Email me a code') : t('Sign in');
-    const btn = h('button.btn.sm', { type: 'submit' }, idle);
-
-    // Runs one request with the button locked, showing any problem under the field.
-    const run = async (busy, work) => {
-      btn.disabled = true;
-      btn.textContent = busy;
-      err.textContent = '';
-      try {
-        await work();
-      } catch (e) {
-        err.textContent = e.message;
-        btn.disabled = false;
-        btn.textContent = idle;
-      }
-    };
-
-    const submit = (e) => {
-      e.preventDefault();
-      if (asking) {
-        run(t('Sending…'), async () => {
-          codeSentTo = await api(window.margin.sendCode(input.value));
-          draw();
-          page.querySelector('input[autocomplete="one-time-code"]')?.focus();
-        });
-      } else {
-        run(t('Checking…'), async () => {
-          S.account = await api(window.margin.verifyCode(codeSentTo, input.value));
-          codeSentTo = null;
-          draw();
-        });
-      }
-    };
-
+    if (confirmingDelete) return deleteConfirm();
     return h(
-      'form.field',
-      { onsubmit: submit, novalidate: true },
-      asking ? h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick: google }, t('Continue with Google'))) : null,
-      asking ? h('p.small', {}, t('Or use your email')) : null,
-      asking ? null : h('p.small', { style: 'color: var(--ink)' }, t('Enter the code we sent to {email}.', { email: codeSentTo })),
-      h('label.label', {}, label),
-      input,
-      err,
-      h('div.row', {}, btn),
-      asking
-        ? null
-        : h(
-            'div.row',
-            {},
-            h(
-              'button.link.quiet',
-              {
-                type: 'button',
-                onclick: () =>
-                  run(t('Sending…'), async () => {
-                    await api(window.margin.sendCode(codeSentTo));
-                    toast(t('New code sent.'));
-                    draw();
-                  }),
-              },
-              t('Send a new code'),
-            ),
-            h('button.link.quiet', { type: 'button', onclick: () => { codeSentTo = null; draw(); } }, t('Use a different email')),
-          ),
+      'div.stack',
+      { style: '--gap: var(--s3)' },
+      h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
+      h(
+        'div.row',
+        {},
+        h(
+          'button.btn.sm.secondary',
+          {
+            onclick: async () => {
+              try {
+                S.account = await api(window.margin.signOut());
+                toast(t('Signed out.'));
+                ctx.go({ name: 'signin' });
+              } catch (e) {
+                toast(e.message);
+              }
+            },
+          },
+          t('Sign out'),
+        ),
+        h('button.link.quiet', { onclick: () => { confirmingDelete = true; draw(); } }, t('Delete account')),
+      ),
     );
   }
 
@@ -314,7 +197,7 @@ export default function settings(root, S, ctx) {
   const accountRows = () => [
         row(
           t('Steelfable account'),
-          t('Optional for now. Your papers and progress stay on this computer.'),
+          t('Your papers and progress stay on this computer.'),
           // Shown beside the sign-in form, so people can read it before giving an email address.
           h('div.stack', { style: '--gap: var(--s3)' }, accountBlock(), h('div', {}, h('button.link.quiet', { type: 'button', onclick: () => window.margin.openPrivacy() }, t('Privacy policy')))),
         ),

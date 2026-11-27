@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '{title} tamam.',
   'Account': 'Hesap',
   'Steelfable account': 'Steelfable hesabı',
-  'Optional for now. Your papers and progress stay on this computer.': 'Şimdilik isteğe bağlı. Metinlerin ve ilerlemen bu bilgisayarda kalır.',
   'Email address': 'E-posta adresi',
   'Email me a code': 'Bana kod gönder',
   'Sending…': 'Gönderiliyor…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': '{n} bölüm',
   '{n} day to go|{n} days to go': '{n} gün kaldı',
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': 'Bitirdiğiniz bölümlerden {n} karışık soru.',
+  'Sign in to Margin': 'Margin’de oturum açın',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'Margin’i kullanmak için ücretsiz bir Steelfable hesabı gerekir. Yeni misiniz? Aynı adımlar hesabı oluşturur.',
+  'For people aged 18 and over.': '18 yaş ve üzeri içindir.',
+  'Your papers and progress stay on this computer.': 'Makaleleriniz ve ilerlemeniz bu bilgisayarda kalır.',
 };

@@ -117,34 +117,39 @@ export default function welcome(root, S, ctx) {
         form,
         note,
       ),
-      h(
-        'aside.right',
-        {},
-        h('p.label', {}, t('What a level looks like')),
-        h(
-          'div.specimen',
-          {},
-          h('p.label', {}, t('Before you read · Guess')),
-          h('p.h3', {}, t('Two groups study the same text. One re-reads it, the other quizzes itself. Who remembers more a week later?')),
-          h(
-            'div.options',
-            { style: 'margin-top: var(--s2)' },
-            specimenOption('1', t('The group that re-read'), ''),
-            specimenOption('2', t('The group that quizzed itself'), 'right'),
-            specimenOption('3', t('No real difference'), ''),
-          ),
-        ),
-        h(
-          'div.specimen',
-          {},
-          h('p.label', {}, t('Passage {n} of {total}', { n: 1, total: 4 })),
-          h('p.h3', {}, t('Recall is the workout')),
-          h('p.reading', {}, rich(t('Pulling an answer out of memory changes the memory. This is the **testing effect**, and it is why every Margin level asks before it tells.'))),
-        ),
-      ),
+      specimens(),
     ),
   );
   firstInput.focus();
+}
+
+// A drawing of a level, shown beside the first-run screens.
+export function specimens() {
+  return h(
+    'aside.right',
+    {},
+    h('p.label', {}, t('What a level looks like')),
+    h(
+      'div.specimen',
+      {},
+      h('p.label', {}, t('Before you read · Guess')),
+      h('p.h3', {}, t('Two groups study the same text. One re-reads it, the other quizzes itself. Who remembers more a week later?')),
+      h(
+        'div.options',
+        { style: 'margin-top: var(--s2)' },
+        specimenOption('1', t('The group that re-read'), ''),
+        specimenOption('2', t('The group that quizzed itself'), 'right'),
+        specimenOption('3', t('No real difference'), ''),
+      ),
+    ),
+    h(
+      'div.specimen',
+      {},
+      h('p.label', {}, t('Passage {n} of {total}', { n: 1, total: 4 })),
+      h('p.h3', {}, t('Recall is the workout')),
+      h('p.reading', {}, rich(t('Pulling an answer out of memory changes the memory. This is the **testing effect**, and it is why every Margin level asks before it tells.'))),
+    ),
+  );
 }
 
 function specimenOption(k, text, state) {

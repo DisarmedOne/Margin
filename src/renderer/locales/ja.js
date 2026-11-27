@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '「{title}」完了。',
   'Account': 'アカウント',
   'Steelfable account': 'Steelfable アカウント',
-  'Optional for now. Your papers and progress stay on this computer.': '今のところ登録は任意です。文書と学習の記録はこのパソコンに残ります。',
   'Email address': 'メールアドレス',
   'Email me a code': 'コードをメールで受け取る',
   'Sending…': '送信中…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': '{n} 章',
   '{n} day to go|{n} days to go': 'あと {n} 日',
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': '終えた章からの混合問題 {n} 問。',
+  'Sign in to Margin': 'Margin にサインイン',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'Margin を使うには無料の Steelfable アカウントが必要です。初めての方も同じ手順で作成できます。',
+  'For people aged 18 and over.': '18歳以上の方が対象です。',
+  'Your papers and progress stay on this computer.': '論文と進捗はこのコンピューターに残ります。',
 };

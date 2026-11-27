@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '“{title}”完成。',
   'Account': '账户',
   'Steelfable account': 'Steelfable 账户',
-  'Optional for now. Your papers and progress stay on this computer.': '目前为可选项。你的文档和学习进度仍保存在这台电脑上。',
   'Email address': '电子邮箱',
   'Email me a code': '发送验证码到邮箱',
   'Sending…': '正在发送…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': '{n} 个章节',
   '{n} day to go|{n} days to go': '还有 {n} 天',
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': '来自已完成章节的 {n} 道混合题。',
+  'Sign in to Margin': '登录 Margin',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': '使用 Margin 需要一个免费的 Steelfable 账户。第一次使用？按同样的步骤即可创建。',
+  'For people aged 18 and over.': '仅限年满 18 岁者使用。',
+  'Your papers and progress stay on this computer.': '你的论文和学习进度保留在这台电脑上。',
 };

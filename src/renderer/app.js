@@ -8,9 +8,10 @@ import review from './views/review.js';
 import progress from './views/progress.js';
 import settings from './views/settings.js';
 import exams from './views/exams.js';
+import signin from './views/signin.js';
 
-const views = { welcome, library, paper, level, review, progress, settings, exams };
-const FOCUS = new Set(['welcome', 'level']);
+const views = { welcome, library, paper, level, review, progress, settings, exams, signin };
+const FOCUS = new Set(['signin', 'welcome', 'level']);
 
 const S = { settings: null, key: null, profile: null, papers: [], providers: {}, languages: {}, route: { name: 'library' } };
 let cleanup = null;
@@ -21,6 +22,10 @@ const ctx = {
   go(route) {
     S.route = route;
     render();
+  },
+  // The first screen once signed in.
+  enter() {
+    ctx.go({ name: S.key.set ? 'library' : 'welcome' });
   },
   async refreshProfile() {
     S.profile = await api(window.margin.profile());
@@ -82,6 +87,8 @@ const ctx = {
 };
 
 function render() {
+  // Checked here, in one place, so no route can be reached while signed out.
+  if (!S.account) S.route = { name: 'signin' };
   const swap = () => {
     cleanup?.();
     cleanup = null;
@@ -236,8 +243,7 @@ async function boot() {
 
   wireDragDrop();
   translateStatic();
-  S.route = S.key.set ? { name: 'library' } : { name: 'welcome' };
-  render();
+  ctx.enter();
   window.margin.onUpdate(showUpdate);
 }
 

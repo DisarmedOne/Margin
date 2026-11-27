@@ -386,7 +386,6 @@ export default {
   '{title}, done.': '“{title}” 완료.',
   'Account': '계정',
   'Steelfable account': 'Steelfable 계정',
-  'Optional for now. Your papers and progress stay on this computer.': '지금은 선택 사항입니다. 문서와 학습 기록은 이 컴퓨터에 그대로 남습니다.',
   'Email address': '이메일 주소',
   'Email me a code': '이메일로 코드 받기',
   'Sending…': '보내는 중…',
@@ -500,4 +499,8 @@ export default {
   '{n} chapter|{n} chapters': '{n}개 장',
   '{n} day to go|{n} days to go': '{n}일 남음',
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': '마친 장에서 섞은 문제 {n}개.',
+  'Sign in to Margin': 'Margin에 로그인',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'Margin을 사용하려면 무료 Steelfable 계정이 필요합니다. 처음이신가요? 같은 절차로 계정이 만들어집니다.',
+  'For people aged 18 and over.': '18세 이상만 이용할 수 있습니다.',
+  'Your papers and progress stay on this computer.': '논문과 학습 진행 상황은 이 컴퓨터에 남습니다.',
 };

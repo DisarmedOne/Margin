@@ -387,7 +387,6 @@ export default {
   '{title}, done.': '«{title}» — اكتمل.',
   'Account': 'الحساب',
   'Steelfable account': 'حساب Steelfable',
-  'Optional for now. Your papers and progress stay on this computer.': 'اختياري في الوقت الحالي. تبقى أوراقك وتقدّمك على هذا الحاسوب.',
   'Email address': 'البريد الإلكتروني',
   'Email me a code': 'أرسل لي رمزًا',
   'Sending…': 'جارٍ الإرسال…',
@@ -501,4 +500,8 @@ export default {
   '{n} chapter|{n} chapters': p('{n} فصل', 'فصل واحد', 'فصلان', '{n} فصول', '{n} فصلًا', '{n} فصل'),
   '{n} day to go|{n} days to go': p('بقي {n} يوم', 'بقي يوم واحد', 'بقي يومان', 'بقيت {n} أيام', 'بقي {n} يومًا', 'بقي {n} يوم'),
   '{n} mixed question from your finished chapters.|{n} mixed questions from your finished chapters.': p('{n} سؤال متنوع من فصولك المكتملة.', 'سؤال متنوع واحد من فصولك المكتملة.', 'سؤالان متنوعان من فصولك المكتملة.', '{n} أسئلة متنوعة من فصولك المكتملة.', '{n} سؤالًا متنوعًا من فصولك المكتملة.', '{n} سؤال متنوع من فصولك المكتملة.'),
+  'Sign in to Margin': 'تسجيل الدخول إلى Margin',
+  'A free Steelfable account is needed to use Margin. New here? The same steps create one.': 'يلزم حساب Steelfable مجاني لاستخدام Margin. هل أنت جديد؟ الخطوات نفسها تنشئ لك حسابًا.',
+  'For people aged 18 and over.': 'لمن هم في سن 18 عامًا فأكثر.',
+  'Your papers and progress stay on this computer.': 'تبقى أوراقك وتقدّمك على هذا الكمبيوتر.',
 };
