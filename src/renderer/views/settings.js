@@ -5,6 +5,10 @@ import { t } from '../i18n.js';
 let codeSentTo = null;
 // null, 'browser' (waiting for the user over there) or 'connecting' (fetching the session).
 let googleStep = null;
+// The open section, kept so leaving Settings and coming back lands in the same place.
+let tab = 'account';
+// Result of the last "Check for updates", shown under the button.
+let updateNote = null;
 
 export default function settings(root, S, ctx) {
   let confirmingDelete = false;
@@ -111,7 +115,7 @@ export default function settings(root, S, ctx) {
     // The wait can outlast this screen; redraw whichever Settings screen is showing now.
     const refresh = () => {
       if (page.isConnected) draw();
-      else if (S.route.name === 'settings') ctx.render();
+      else if (S.route.name === 'settings') ctx.go(S.route);
     };
     window.margin.onGoogleReturn(() => {
       googleStep = 'connecting';
@@ -281,20 +285,42 @@ export default function settings(root, S, ctx) {
     );
   }
 
-  function draw() {
-    page.replaceChildren(
-      h('header.pagehead', {}, h('div.stack', {}, h('p.label', {}, t('Settings')), h('h1.h1', {}, t('Preferences')))),
-      h(
-        'div.settings',
-        {},
-        group(t('Account')),
+  async function exportCards() {
+    try {
+      const n = await api(window.margin.exportCards());
+      if (n !== null) toast(t('Flashcards saved: {n}', { n }));
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  async function checkUpdates() {
+    updateNote = t('Checking…');
+    draw();
+    try {
+      const r = await api(window.margin.checkUpdate());
+      if (r.status === 'current') updateNote = t('You have the latest version.');
+      else if (r.status === 'downloading') updateNote = t('Downloading version {version}. Margin will tell you when it is ready.', r);
+      else if (r.status === 'ready') updateNote = t('Margin {version} is ready', r);
+      else updateNote = t('Updates only work in the installed app.');
+    } catch (e) {
+      updateNote = e.message;
+    }
+    if (page.isConnected) draw();
+  }
+
+  const button = (label, onclick, attrs = {}) => h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick, ...attrs }, label));
+
+  const accountRows = () => [
         row(
           t('Steelfable account'),
           t('Optional for now. Your papers and progress stay on this computer.'),
           // Shown beside the sign-in form, so people can read it before giving an email address.
           h('div.stack', { style: '--gap: var(--s3)' }, accountBlock(), h('div', {}, h('button.link.quiet', { type: 'button', onclick: () => window.margin.openPrivacy() }, t('Privacy policy')))),
         ),
-        group(t('Learning')),
+  ];
+
+  const learningRows = () => [
         row(
           t('Language'),
           t('Menus and buttons, plus everything the AI writes: levels, questions and feedback. Levels already written stay in their language.'),
@@ -338,7 +364,18 @@ export default function settings(root, S, ctx) {
             [true, t('On')],
           ]),
         ),
-        group(t('Look and feel')),
+        row(
+          t('Cards per review'),
+          t('How many due cards one review session holds. The rest wait for the next one.'),
+          seg('reviewSize', [
+            [10, '10'],
+            [30, '30'],
+            [50, '50'],
+          ]),
+        ),
+  ];
+
+  const lookRows = () => [
         row(
           t('Reading size'),
           t('Text size for passages, questions and answers.'),
@@ -374,7 +411,9 @@ export default function settings(root, S, ctx) {
             [false, t('Off')],
           ]),
         ),
-        group(t('AI and data')),
+  ];
+
+  const aiRows = () => [
         row(t('AI provider'), t('Which service writes your levels. Each key is stored encrypted on this computer. Levels already written stay as they are.'), providerBlock()),
         row(
           t('Your data'),
@@ -386,8 +425,77 @@ export default function settings(root, S, ctx) {
           t('New levels are written by this model.'),
           h('p.num.small', { style: 'color: var(--ink)' }, `${S.providers[S.key.provider].modelName} · ${S.providers[S.key.provider].model}`),
         ),
-        h('p.small.num.muted', {}, `Margin ${S.version}`),
+        row(
+          t('Prepare levels ahead'),
+          t('Writes upcoming levels in the background so you rarely wait. Off writes each level only when you open it, so nothing is spent on chapters you skip.'),
+          seg('prepareAhead', [
+            [true, t('On')],
+            [false, t('Off')],
+          ]),
+        ),
+        row(
+          t('Flashcards'),
+          S.profile.deckSize ? t('Save your review deck as a CSV file, for Anki, a spreadsheet or a backup.') : t('No flashcards yet. Finish a level to start your deck.'),
+          button(t('Export flashcards'), exportCards, { disabled: !S.profile.deckSize }),
+        ),
+  ];
+
+  const aboutRows = () => [
+    row(
+      t('Updates'),
+      t('Margin checks each time it opens. You have version {version}.', { version: S.version }),
+      h('div.stack', { style: '--gap: var(--s3)' }, button(t('Check for updates'), checkUpdates), h('p.small', { role: 'status', style: 'color: var(--ink)' }, updateNote)),
+    ),
+    row(
+      t('Help and feedback'),
+      t('Something broken or confusing? Write to {email}.', { email: 'support@steelfable.com' }),
+      button(t('Email support'), () => window.margin.openSupport()),
+    ),
+    row(t('Website'), t('News and downloads on steelfable.com.'), button(t('Open website'), () => window.margin.openWebsite())),
+    row(t('Privacy policy'), t('What Steelfable and Margin collect, and how to delete it.'), button(t('Privacy policy'), () => window.margin.openPrivacy())),
+    h('p.small.num.muted', {}, `Margin ${S.version}`),
+  ];
+
+  const SECTIONS = [
+    ['account', t('Account'), accountRows],
+    ['learning', t('Learning'), learningRows],
+    ['look', t('Look and feel'), lookRows],
+    ['ai', t('AI and data'), aiRows],
+    ['about', t('About'), aboutRows],
+  ];
+
+  function openTab(id) {
+    tab = id;
+    draw();
+    page.querySelector(`#tab-${id}`).focus();
+  }
+
+  // Standard tab keys: arrows move between sections, Home and End jump to the ends.
+  function tabKeys(e) {
+    const i = SECTIONS.findIndex(([id]) => id === tab);
+    const last = SECTIONS.length - 1;
+    const next = { ArrowRight: i === last ? 0 : i + 1, ArrowLeft: i === 0 ? last : i - 1, Home: 0, End: last }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    openTab(SECTIONS[next][0]);
+  }
+
+  function draw() {
+    const [, , rows] = SECTIONS.find(([id]) => id === tab);
+    page.replaceChildren(
+      h('header.pagehead.tabbed', {}, h('div.stack', {}, h('p.label', {}, t('Settings')), h('h1.h1', {}, t('Preferences')))),
+      h(
+        'div.tabs',
+        { role: 'tablist', 'aria-label': t('Settings'), onkeydown: tabKeys },
+        SECTIONS.map(([id, label]) =>
+          h(
+            'button',
+            { type: 'button', role: 'tab', id: `tab-${id}`, 'aria-selected': String(id === tab), 'aria-controls': 'tabpanel', tabindex: id === tab ? '0' : '-1', onclick: () => id !== tab && openTab(id) },
+            label,
+          ),
+        ),
       ),
+      h('div.settings', { id: 'tabpanel', role: 'tabpanel', 'aria-labelledby': `tab-${tab}` }, rows()),
     );
   }
 
@@ -399,7 +507,5 @@ export const NATIVE = {
   en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', nl: 'Nederlands', pt: 'Português', it: 'Italiano', ru: 'Русский',
   zh: '中文（简体）', ja: '日本語', ko: '한국어', ar: 'العربية', hi: 'हिन्दी', tr: 'Türkçe', pl: 'Polski',
 };
-
-const group = (title) => h('p.label.setting-group', {}, title);
 
 const row = (title, hint, control) => h('section.setting', {}, h('div.stack', {}, h('h3', {}, title), h('p.small', {}, hint)), h('div', {}, control));

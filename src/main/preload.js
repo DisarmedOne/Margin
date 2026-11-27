@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('margin', {
   openConsole: (provider) => call('open:console', provider),
   openData: () => call('open:data'),
   openPrivacy: () => call('open:privacy'),
+  onUpdate: (cb) => {
+    ipcRenderer.on('update-ready', (_e, update) => cb(update));
+    call('update:pending').then((r) => r.ok && r.data && cb(r.data));
+  },
+  checkUpdate: () => call('update:check'),
+  exportCards: () => call('cards:export'),
+  openSupport: () => call('open:support'),
+  openWebsite: () => call('open:website'),
+  installUpdate: () => call('update:install'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   onPaper: (cb) => {
     const listener = (_e, paper) => cb(paper);

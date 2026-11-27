@@ -11,6 +11,7 @@ const fresh = () => ({
   settings: {
     sound: true, motion: 'full', theme: 'system', provider: 'anthropic', keys: {}, language: 'en', dailyGoal: 60,
     readingSize: 'm', confidence: true, autoContinue: false, levelLength: 'standard',
+    reviewSize: 30, prepareAhead: true,
   },
   profile: {
     xp: 0,

@@ -445,6 +445,11 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 .ladder li span:first-child { flex: 1; }
 
 /* ---------- settings ---------- */
+.pagehead.tabbed { border-bottom: 0; margin-bottom: 0; padding-bottom: var(--s4); }
+.tabs { display: flex; flex-wrap: wrap; gap: 0 var(--s5); border-bottom: 1px solid var(--ink); }
+.tabs button { border: 0; background: none; padding: var(--s2) 0 var(--s3); cursor: pointer; font: 500 12px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected='true'] { color: var(--ink); box-shadow: inset 0 -3px 0 var(--accent); }
 .settings { max-width: 720px; }
 .setting { display: grid; grid-template-columns: 220px 1fr; gap: var(--s6); padding: var(--s5) 0; border-bottom: 1px solid var(--rule); }
 .setting .stack { --gap: var(--s1); }
@@ -582,3 +587,16 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 .connecting-bar { height: 3px; background: var(--rule); overflow: hidden; }
 .connecting-bar i { display: block; width: 35%; height: 100%; background: var(--ink); animation: sweep 1.1s ease-in-out infinite alternate; }
 @keyframes sweep { to { transform: translateX(186%); } }
+
+/* ---------- update prompt ---------- */
+.update { width: min(460px, calc(100vw - 48px)); padding: var(--s6) var(--s6) var(--s5) var(--s7); border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink-2); }
+.update[open] { display: grid; gap: var(--s3); animation: rise 260ms cubic-bezier(.2,.7,.2,1); }
+.update::backdrop { background: rgb(15 14 12 / 0.45); }
+/* the margin rule down the left edge, as on a ruled page */
+.update::before { content: ''; position: absolute; inset: 0 auto 0 var(--s5); width: 1px; background: var(--accent); }
+.update .h2 { margin: 0; }
+.update p { margin: 0; }
+.update-ver { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) 0; border-block: 1px solid var(--rule); font: 500 12px var(--mono); color: var(--ink-3); }
+.update-ver i { width: 24px; height: 1px; background: var(--rule-strong); }
+.update-ver b { color: var(--ink); font-weight: 600; }
+.update-actions { display: flex; gap: var(--s2); margin-top: var(--s2); }

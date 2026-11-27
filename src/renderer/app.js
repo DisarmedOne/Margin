@@ -184,6 +184,33 @@ function wireDragDrop() {
   });
 }
 
+// Shown once a new version has downloaded. A native <dialog> gives focus trapping and Esc (= Later).
+function showUpdate({ version, current }) {
+  if (document.querySelector('.update')) return;
+  const dialog = h(
+    'dialog.update',
+    {
+      'aria-labelledby': 'update-title',
+      // Keeps level and review shortcuts from reacting to keys meant for this prompt.
+      onkeydown: (e) => e.stopPropagation(),
+      onclose: () => dialog.remove(),
+    },
+    h('p.label', {}, t('Update ready')),
+    h('h2.h2', { id: 'update-title' }, t('Margin {version} is ready', { version })),
+    h('p.body', {}, t('Restart now to update, or choose Later and it installs when you close Margin. Your papers and progress stay as they are.')),
+    h('p.update-ver', {}, h('span', {}, 'v' + current), h('i'), h('b', {}, 'v' + version)),
+    h(
+      'div.update-actions',
+      {},
+      h('button.btn', { onclick: () => api(window.margin.installUpdate()).catch((e) => toast(e.message)) }, t('Restart now')),
+      // Focus starts here, so a stray Enter cannot restart the app in the middle of a level.
+      h('button.btn.ghost', { autofocus: true, onclick: () => dialog.close() }, t('Later')),
+    ),
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 function translateStatic() {
   document.querySelector('.drop-overlay .label').textContent = t('Drop to add');
   document.querySelector('.drop-overlay .h2').textContent = t('Let go of the file anywhere');
@@ -209,6 +236,7 @@ async function boot() {
   translateStatic();
   S.route = S.key.set ? { name: 'library' } : { name: 'welcome' };
   render();
+  window.margin.onUpdate(showUpdate);
 }
 
 boot().catch((e) => {

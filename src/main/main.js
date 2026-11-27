@@ -8,6 +8,7 @@ const ai = require('./ai');
 const srs = require('./srs');
 const updater = require('./updater');
 const account = require('./account');
+const { cardsCsv } = require('./cards-csv');
 
 const MAX_BYTES = 30 * 1024 * 1024; // Claude's request limit is 32 MB including base64 overhead headroom
 const ACCEPTED = ['.pdf', '.docx', '.txt', '.md'];
@@ -207,7 +208,7 @@ async function timed(what, fn) {
 // Sequential rather than parallel to stay inside free-tier rate limits.
 async function prefetchAll(paper) {
   for (let i = 0; i < paper.outline.chapters.length; i++) {
-    if (!S().papers.includes(paper)) return;
+    if (!S().papers.includes(paper) || !S().settings.prepareAhead) return;
     try {
       await getLevel(paper.id, i);
     } catch {
@@ -293,7 +294,7 @@ function dueCards() {
   return S()
     .cards.filter((c) => c.due <= now)
     .sort((a, b) => a.due - b.due)
-    .slice(0, 30)
+    .slice(0, S().settings.reviewSize)
     // Raw wait times per rating; the renderer words them in the learner's language.
     .map((c) => ({ ...c, paperTitle: titles[c.paperId] ?? '', previewMs: [0, 1, 2, 3].map((r) => srs.schedule(c, r, now).due - now) }));
 }
@@ -326,6 +327,22 @@ function profileView() {
     nextDue: upcoming?.due ?? null,
     today: srs.dayKey(),
   };
+}
+
+async function exportCards() {
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Export flashcards',
+    defaultPath: path.join(app.getPath('documents'), 'Margin flashcards.csv'),
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+  if (r.canceled) return null;
+  const titles = Object.fromEntries(S().papers.map((p) => [p.id, p.outline?.title ?? p.fileName]));
+  try {
+    await fs.writeFile(r.filePath, cardsCsv(S().cards, titles));
+  } catch {
+    throw new ai.MarginError('SAVE', 'Could not save the file. Close it if it is open, or choose another folder.');
+  }
+  return S().cards.length;
 }
 
 // ---------- Steelfable account ----------
@@ -397,8 +414,8 @@ function handle(channel, fn) {
 
 function registerIpc() {
   const publicSettings = () => {
-    const { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength } = S().settings;
-    return { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength };
+    const { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead } = S().settings;
+    return { sound, motion, theme, language, dailyGoal, readingSize, confidence, autoContinue, levelLength, reviewSize, prepareAhead };
   };
   handle('boot', () => ({
     settings: publicSettings(),
@@ -439,10 +456,12 @@ function registerIpc() {
     const allowed = {
       sound: 'boolean', motion: 'string', theme: 'string', language: 'string', dailyGoal: 'number',
       readingSize: 'string', confidence: 'boolean', autoContinue: 'boolean', levelLength: 'string',
+      reviewSize: 'number', prepareAhead: 'boolean',
     };
     for (const [k, v] of Object.entries(patch)) if (typeof v === allowed[k]) S().settings[k] = v;
     if ('motion' in patch) S().settings.motionChosen = true;
     ai.setLevelLength(S().settings.levelLength);
+    if (![10, 30, 50].includes(S().settings.reviewSize)) S().settings.reviewSize = 30;
     if (!ai.LANGUAGES[S().settings.language]) S().settings.language = 'en';
     S().settings.dailyGoal = Math.min(500, Math.max(10, Math.round(S().settings.dailyGoal) || 60));
     ai.setLanguage(S().settings.language);
@@ -474,7 +493,7 @@ function registerIpc() {
   });
   handle('level:get', (id, index) => getLevel(id, index));
   handle('level:prefetch', (id, index) => {
-    getLevel(id, index).catch(() => {}); // errors surface when the learner actually opens it
+    if (S().settings.prepareAhead) getLevel(id, index).catch(() => {}); // errors surface when the learner actually opens it
     return true;
   });
   handle('level:complete', completeLevel);
@@ -488,6 +507,12 @@ function registerIpc() {
   handle('profile:get', profileView);
   handle('open:console', (provider) => CONSOLES[provider] && shell.openExternal(CONSOLES[provider]));
   handle('open:data', () => shell.openPath(store.root()));
+  handle('cards:export', exportCards);
+  handle('update:check', () => updater.check());
+  handle('open:support', () => shell.openExternal('mailto:support@steelfable.com'));
+  handle('open:website', () => shell.openExternal('https://steelfable.com/margin/'));
+  handle('update:pending', () => updater.pending());
+  handle('update:install', () => updater.install());
   handle('open:privacy', () => shell.openExternal('https://steelfable.com/privacy/'));
 }
 

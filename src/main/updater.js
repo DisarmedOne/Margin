@@ -1,9 +1,11 @@
 // Checks GitHub Releases for a newer Margin on launch, downloads it in the background,
-// and asks the user to restart once it is ready. Packaged builds only.
-const { app, BrowserWindow, dialog } = require('electron');
+// and tells the window once it is ready so it can ask to restart. Packaged builds only.
+const { app, BrowserWindow } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { MarginError } = require('./ai');
 
 let started = false;
+let ready = null; // {version, current} once an update is downloaded
 
 const mainWindow = () => BrowserWindow.getAllWindows()[0];
 // Taskbar progress while downloading; -1 removes the bar.
@@ -25,24 +27,36 @@ function start() {
     console.error('[updater]', e?.message ?? e);
   });
 
-  autoUpdater.on('update-downloaded', async (info) => {
+  autoUpdater.on('update-downloaded', (info) => {
     progress(-1);
-    const options = {
-      type: 'info',
-      title: 'Update ready',
-      message: `Margin ${info.version} is ready`,
-      detail: `You have ${app.getVersion()}. Restart now to update, or choose Later and it installs when you close Margin. Your papers and progress stay as they are.`,
-      buttons: ['Restart now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    };
-    const win = mainWindow();
-    const { response } = await (win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options));
-    if (response === 0) autoUpdater.quitAndInstall();
+    ready = { version: info.version, current: app.getVersion() };
+    mainWindow()?.webContents.send('update-ready', ready);
   });
 
   autoUpdater.checkForUpdates().catch((e) => console.error('[updater]', e?.message ?? e));
 }
 
-module.exports = { start };
+// "Check for updates" in Settings.
+async function check() {
+  if (!app.isPackaged) return { status: 'dev' };
+  if (ready) {
+    mainWindow()?.webContents.send('update-ready', ready); // shows the prompt again after Later
+    return { status: 'ready', version: ready.version };
+  }
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    if (!r?.isUpdateAvailable) return { status: 'current' };
+    r.downloadPromise?.catch(() => {}); // already reported by the error event
+    return { status: 'downloading', version: r.updateInfo.version };
+  } catch {
+    throw new MarginError('UPDATE', 'Could not check for updates. Try again later.');
+  }
+}
+
+// The window asks for this when it loads, in case the download finished before it was listening.
+const pending = () => ready;
+const install = () => {
+  if (ready) autoUpdater.quitAndInstall();
+};
+
+module.exports = { start, check, pending, install };
