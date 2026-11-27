@@ -332,11 +332,43 @@ function profileView() {
 // Only the email is shown to the page; the session stays here, encrypted like the API keys.
 const publicAccount = () => (S().account ? { email: S().account.email } : null);
 
-async function accountVerify(email, code) {
-  const r = await account.verifyCode(email, code);
+async function saveAccount(r) {
   S().account = { email: r.email, session: safeStorage.encryptString(JSON.stringify(r.session)).toString('base64') };
   await store.save();
   return publicAccount();
+}
+
+const accountVerify = async (email, code) => saveAccount(await account.verifyCode(email, code));
+
+async function accountGoogle() {
+  const r = await account.signInWithGoogle((url) => shell.openExternal(url), {
+    onReturn: () => {
+      emit('google-return');
+      win?.focus();
+    },
+  });
+  return saveAccount(r);
+}
+
+const readSession = (saved) => JSON.parse(safeStorage.decryptString(Buffer.from(saved.session, 'base64')));
+
+// The local sign-in is only removed once the server has confirmed the account is gone.
+async function accountDelete() {
+  const saved = S().account;
+  if (!saved) return null;
+  let session;
+  try {
+    session = readSession(saved);
+  } catch {
+    throw new ai.MarginError('SIGNIN', 'Sign out, sign in again, then delete your account.');
+  }
+  await account.deleteAccount(session, async (renewed) => {
+    saved.session = safeStorage.encryptString(JSON.stringify(renewed)).toString('base64');
+    await store.save();
+  });
+  delete S().account;
+  await store.save();
+  return null;
 }
 
 async function accountSignOut() {
@@ -344,7 +376,7 @@ async function accountSignOut() {
   delete S().account;
   await store.save();
   try {
-    await account.signOut(JSON.parse(safeStorage.decryptString(Buffer.from(saved.session, 'base64'))));
+    await account.signOut(readSession(saved));
   } catch {
     /* nothing saved, or it can no longer be read */
   }
@@ -380,7 +412,10 @@ function registerIpc() {
   }));
   handle('account:send', account.sendCode);
   handle('account:verify', accountVerify);
+  handle('account:google', accountGoogle);
+  handle('account:google-cancel', () => account.cancelGoogle());
   handle('account:signout', accountSignOut);
+  handle('account:delete', accountDelete);
   handle('review:pool', () => {
     // Random cards for the lightning round; scheduling is untouched.
     const cards = [...S().cards].sort(() => Math.random() - 0.5).slice(0, 40);
@@ -453,6 +488,7 @@ function registerIpc() {
   handle('profile:get', profileView);
   handle('open:console', (provider) => CONSOLES[provider] && shell.openExternal(CONSOLES[provider]));
   handle('open:data', () => shell.openPath(store.root()));
+  handle('open:privacy', () => shell.openExternal('https://steelfable.com/privacy/'));
 }
 
 app.whenReady().then(async () => {

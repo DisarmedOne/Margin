@@ -3,8 +3,11 @@ import { t } from '../i18n.js';
 
 // The address a code was sent to. Kept here so leaving Settings doesn't lose the code step.
 let codeSentTo = null;
+// null, 'browser' (waiting for the user over there) or 'connecting' (fetching the session).
+let googleStep = null;
 
 export default function settings(root, S, ctx) {
+  let confirmingDelete = false;
   const page = h('div.page');
   root.append(page);
 
@@ -102,14 +105,72 @@ export default function settings(root, S, ctx) {
     return wrap;
   }
 
+  async function google() {
+    googleStep = 'browser';
+    draw();
+    // The wait can outlast this screen; redraw whichever Settings screen is showing now.
+    const refresh = () => {
+      if (page.isConnected) draw();
+      else if (S.route.name === 'settings') ctx.render();
+    };
+    window.margin.onGoogleReturn(() => {
+      googleStep = 'connecting';
+      refresh();
+    });
+    try {
+      S.account = await api(window.margin.signInWithGoogle());
+      codeSentTo = null;
+    } catch (e) {
+      if (e.code !== 'CANCELLED') toast(e.message);
+    }
+    googleStep = null;
+    refresh();
+  }
+
+  // Deleting can't be undone, so it takes a second, clearly worded click.
+  function deleteConfirm() {
+    const err = h('p.error-text', { role: 'alert' });
+    const cancel = h('button.btn.sm.ghost', { onclick: () => { confirmingDelete = false; draw(); } }, t('Cancel'));
+    const confirm = h(
+      'button.btn.sm.danger',
+      {
+        onclick: async () => {
+          confirm.disabled = cancel.disabled = true;
+          confirm.textContent = t('Deleting…');
+          err.textContent = '';
+          try {
+            S.account = await api(window.margin.deleteAccount());
+            toast(t('Your account has been deleted.'));
+            confirmingDelete = false;
+            draw();
+          } catch (e) {
+            err.textContent = e.message;
+            confirm.disabled = cancel.disabled = false;
+            confirm.textContent = t('Delete my account');
+          }
+        },
+      },
+      t('Delete my account'),
+    );
+    return h(
+      'div.stack',
+      { style: '--gap: var(--s3)' },
+      h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
+      h('p.small', {}, t('This permanently deletes your Steelfable account and cannot be undone. Your papers and progress stay on this computer.')),
+      err,
+      h('div.row', {}, confirm, cancel),
+    );
+  }
+
   function accountBlock() {
+    if (S.account && confirmingDelete) return deleteConfirm();
     if (S.account) {
       return h(
         'div.stack',
         { style: '--gap: var(--s3)' },
         h('p.small', { style: 'color: var(--ink)' }, t('Signed in as {email}.', { email: S.account.email })),
         h(
-          'div',
+          'div.row',
           {},
           h(
             'button.btn.sm.secondary',
@@ -126,7 +187,21 @@ export default function settings(root, S, ctx) {
             },
             t('Sign out'),
           ),
+          h('button.link.quiet', { onclick: () => { confirmingDelete = true; draw(); } }, t('Delete account')),
         ),
+      );
+    }
+
+    if (googleStep === 'connecting') {
+      return h('div.connecting', { role: 'status' }, h('p.small', {}, t('Connecting…')), h('div.connecting-bar', { 'aria-hidden': 'true' }, h('i')));
+    }
+
+    if (googleStep === 'browser') {
+      return h(
+        'div.stack',
+        { style: '--gap: var(--s3)' },
+        h('p.small', { style: 'color: var(--ink)', role: 'status' }, t('Finish signing in with Google in your browser.')),
+        h('div', {}, h('button.btn.sm.secondary', { onclick: () => window.margin.cancelGoogle() }, t('Cancel'))),
       );
     }
 
@@ -176,6 +251,8 @@ export default function settings(root, S, ctx) {
     return h(
       'form.field',
       { onsubmit: submit, novalidate: true },
+      asking ? h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick: google }, t('Continue with Google'))) : null,
+      asking ? h('p.small', {}, t('Or use your email')) : null,
       asking ? null : h('p.small', { style: 'color: var(--ink)' }, t('Enter the code we sent to {email}.', { email: codeSentTo })),
       h('label.label', {}, label),
       input,
@@ -211,7 +288,12 @@ export default function settings(root, S, ctx) {
         'div.settings',
         {},
         group(t('Account')),
-        row(t('Steelfable account'), t('Optional for now. Your papers and progress stay on this computer.'), accountBlock()),
+        row(
+          t('Steelfable account'),
+          t('Optional for now. Your papers and progress stay on this computer.'),
+          // Shown beside the sign-in form, so people can read it before giving an email address.
+          h('div.stack', { style: '--gap: var(--s3)' }, accountBlock(), h('div', {}, h('button.link.quiet', { type: 'button', onclick: () => window.margin.openPrivacy() }, t('Privacy policy')))),
+        ),
         group(t('Learning')),
         row(
           t('Language'),
@@ -296,7 +378,7 @@ export default function settings(root, S, ctx) {
         row(t('AI provider'), t('Which service writes your levels. Each key is stored encrypted on this computer. Levels already written stay as they are.'), providerBlock()),
         row(
           t('Your data'),
-          t('Papers, levels and progress live in a folder on this computer. Only the paper itself is sent to your AI provider, to write levels.'),
+          t('Papers, levels and progress live in a folder on this computer. To write and grade lessons, your paper and written explanations are sent to your AI provider.'),
           h('div', {}, h('button.btn.sm.secondary', { onclick: () => window.margin.openData() }, iconEl('folder'), t('Open data folder'))),
         ),
         row(

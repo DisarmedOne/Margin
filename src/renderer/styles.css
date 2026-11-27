@@ -575,3 +575,10 @@ h1, h2, h3 { margin: 0; color: var(--ink); font-family: var(--serif); font-weigh
 /* Arabic: every text element picks its own direction so sentences read right to left. */
 :root[lang='ar'] :is(p, h1, h2, h3, span, button, label, li, dd, dt, b, td, th, option) { unicode-bidi: plaintext; }
 .lang-picker { width: auto; height: 34px; font-size: 13px; padding-right: 36px; }
+
+/* Account: an open-ended wait, so the bar sweeps instead of filling. */
+.connecting { display: grid; gap: var(--s3); max-width: 280px; }
+.connecting p { color: var(--ink); }
+.connecting-bar { height: 3px; background: var(--rule); overflow: hidden; }
+.connecting-bar i { display: block; width: 35%; height: 100%; background: var(--ink); animation: sweep 1.1s ease-in-out infinite alternate; }
+@keyframes sweep { to { transform: translateX(186%); } }

@@ -9,7 +9,14 @@ contextBridge.exposeInMainWorld('margin', {
   setSettings: (patch) => call('settings:set', patch),
   sendCode: (email) => call('account:send', email),
   verifyCode: (email, code) => call('account:verify', email, code),
+  signInWithGoogle: () => call('account:google'),
+  cancelGoogle: () => call('account:google-cancel'),
+  onGoogleReturn: (cb) => {
+    ipcRenderer.removeAllListeners('google-return');
+    ipcRenderer.once('google-return', () => cb());
+  },
   signOut: () => call('account:signout'),
+  deleteAccount: () => call('account:delete'),
   pickFiles: () => call('papers:pick'),
   addPaper: (path) => call('papers:add', path),
   getPaper: (id) => call('papers:get', id),
@@ -26,6 +33,7 @@ contextBridge.exposeInMainWorld('margin', {
   profile: () => call('profile:get'),
   openConsole: (provider) => call('open:console', provider),
   openData: () => call('open:data'),
+  openPrivacy: () => call('open:privacy'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   onPaper: (cb) => {
     const listener = (_e, paper) => cb(paper);

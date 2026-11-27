@@ -100,8 +100,13 @@
     openConsole: async () => ok(true),
     sendCode: async (email) => { await wait(600); return /@.+\./.test(email) ? ok(email) : { ok: false, error: { message: 'Enter a valid email address.' } }; },
     verifyCode: async (email, code) => { await wait(600); return code === '123456' ? ok({ email }) : { ok: false, error: { message: 'That code is wrong or has expired. Check it, or send a new one.' } }; },
+    onGoogleReturn: (cb) => { window.googleReturn = cb; },
+    signInWithGoogle: () => new Promise((done) => { window.endGoogle = done; setTimeout(() => window.googleReturn?.(), 2000); setTimeout(() => done(ok({ email: 'reader@gmail.com' })), 6000); }),
+    cancelGoogle: async () => { window.endGoogle?.({ ok: false, error: { code: 'CANCELLED', message: 'Google sign-in was cancelled.' } }); return ok(true); },
     signOut: async () => ok(null),
+    deleteAccount: async () => { await wait(900); return new URLSearchParams(location.search).get('delfail') ? { ok: false, error: { message: 'Could not delete your account. Try again in a minute.' } } : ok(null); },
     openData: async () => ok(true),
+    openPrivacy: async () => ok(true),
     pathForFile: () => null,
     onPaper: () => () => {},
   };

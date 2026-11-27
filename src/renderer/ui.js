@@ -8,21 +8,21 @@ export const PROVIDER_COPY = {
     keyLabel: 'Anthropic API key',
     placeholder: 'sk-ant-api03-…',
     console: 'Get a key from the Anthropic Console',
-    note: 'Margin uses Claude Opus 5.5. Turning a typical 20-page paper into a full route costs roughly $0.50 to $1.50 on your Anthropic account.',
+    note: 'Margin uses Claude Opus 5.5. Your Anthropic account is charged for what Margin sends and receives.',
   },
   gemini: {
-    option: 'Google Gemini · free tier available',
+    option: 'Google Gemini',
     keyLabel: 'Gemini API key',
     placeholder: 'AIza…',
-    console: 'Get a free key from Google AI Studio',
-    note: 'Margin uses Gemini 4 Hydrogen, which is free on Google’s free tier within daily request limits. On the free tier Google may use what you send to improve its products, so avoid confidential papers.',
+    console: 'Get a key from Google AI Studio',
+    note: 'Margin uses Gemini 4 Hydrogen. Google may charge you. In the EEA, Switzerland and the UK, Google’s terms require its paid service for apps like this. You must be 18 or over.',
   },
   openai: {
     option: 'OpenAI',
     keyLabel: 'OpenAI API key',
     placeholder: 'sk-proj-…',
     console: 'Get a key from the OpenAI dashboard',
-    note: 'Margin uses GPT-6.2 Sol. Turning a typical 20-page paper into a full route costs roughly $0.50 to $1.00 on your OpenAI account.',
+    note: 'Margin uses GPT-6.2 Sol. Your OpenAI account is charged for what Margin sends and receives.',
   },
 };
 
