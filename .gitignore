@@ -138,3 +138,5 @@ dist
 # Margin local files
 release-upload/
 data/
+installer/bin/
+installer/obj/

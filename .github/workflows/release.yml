@@ -1,10 +1,11 @@
 # Pushing a tag like v1.5.3 builds Margin and publishes the GitHub release the updater reads.
-# "Run workflow" in the Actions tab only tests and builds, it releases nothing.
+# "Run workflow" in the Actions tab, or pushing a ci/ branch, only tests and builds. It releases nothing.
 name: Release
 
 on:
   push:
     tags: ['v*']
+    branches: ['ci/**']
   workflow_dispatch:
 
 permissions:
@@ -25,11 +26,14 @@ jobs:
         if: github.ref_type == 'tag'
         shell: bash
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
-      - run: npx electron-builder --win nsis --publish never
-      # One gh call creates the release and uploads everything; electron-builder's own publish raced itself (422).
+      - run: npm run dist
+      - name: Install, update and uninstall on this clean machine
+        shell: pwsh
+        run: ./build/smoke-installer.ps1
+      # One gh call creates the release and uploads both files.
       - name: Publish release
         if: github.ref_type == 'tag'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.exe dist/*.exe.blockmap dist/latest.yml --title "${GITHUB_REF_NAME#v}" --generate-notes --latest --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" dist/Margin-Setup-*.exe dist/latest.yml --title "${GITHUB_REF_NAME#v}" --generate-notes --latest --verify-tag

@@ -22,6 +22,10 @@ namespace MarginSetup
             Application.SetCompatibleTextRenderingDefault(false);
 
             var self = Process.GetCurrentProcess().MainModule.FileName;
+            // The app's updater can start us inside the install folder, which would lock it.
+            Environment.CurrentDirectory = Path.GetTempPath();
+            // The app's updater passes --updated, plus /S when it installs as Margin closes.
+            bool updated = args.Contains("--updated"), silent = args.Contains("/S");
             var payload = Payload.Read(self);
             bool uninstall = args.Contains("--uninstall") || payload == null;
 
@@ -33,14 +37,34 @@ namespace MarginSetup
                 {
                     var tmp = Path.Combine(Path.GetTempPath(), $"margin-uninstall-{Guid.NewGuid():N}.exe");
                     File.Copy(self, tmp);
-                    Process.Start(new ProcessStartInfo(tmp, $"--uninstall --relaunched --dir \"{dir}\"") { UseShellExecute = false });
+                    Process.Start(new ProcessStartInfo(tmp, $"--uninstall --relaunched --dir \"{dir}\"{(silent ? " /S" : "")}") { UseShellExecute = false });
                     return;
                 }
-                Application.Run(new SetupForm(new Ops(dir, null, self), uninstall: true));
+                var ops = new Ops(dir, null, self);
+                if (silent) RunSilently(() => { ops.CloseAfterWait(); ops.Uninstall(false, (p, s) => { }); ops.ScheduleSelfDelete(); });
+                else Application.Run(new SetupForm(ops, uninstall: true));
             }
             else
             {
-                Application.Run(new SetupForm(new Ops(Ops.DefaultDir, payload, self), uninstall: false));
+                var ops = new Ops(Ops.InstalledDir(), payload, self);
+                if (silent)
+                    RunSilently(() =>
+                    {
+                        ops.CloseAfterWait();
+                        ops.Install(!updated || ops.HasDesktopShortcut, (p, s) => { });
+                        if (args.Contains("--force-run")) ops.Launch();
+                    });
+                else Application.Run(new SetupForm(ops, uninstall: false, update: updated));
+            }
+        }
+
+        static void RunSilently(Action work)
+        {
+            try { work(); }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e.Message);
+                Environment.ExitCode = 1;
             }
         }
 
@@ -110,7 +134,8 @@ namespace MarginSetup
     class Ops
     {
         public static readonly string DefaultDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Margin");
-        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Margin";
+        const string UninstallRoot = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+        const string UninstallKey = UninstallRoot + @"\Margin";
         public static readonly string DataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Margin");
         static readonly string StartMenuLink = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Margin.lnk");
         static readonly string DesktopLink = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Margin.lnk");
@@ -121,6 +146,36 @@ namespace MarginSetup
         public Ops(string dir, Payload payload, string self) { Dir = dir; Payload = payload; this.self = self; }
 
         public string AppExe => Path.Combine(Dir, "Margin.exe");
+        public bool HasDesktopShortcut => File.Exists(DesktopLink);
+        public void Launch() => Process.Start(new ProcessStartInfo(AppExe) { WorkingDirectory = Dir });
+
+        // Where Margin already lives: our own entry, then one left by the plain installer used for 1.5.1 and 1.5.2.
+        public static string InstalledDir()
+        {
+            using (var k = Registry.CurrentUser.OpenSubKey(UninstallKey))
+                if (k?.GetValue("InstallLocation") is string own && own.Length > 0) return own;
+            using var root = Registry.CurrentUser.OpenSubKey(UninstallRoot);
+            foreach (var name in root?.GetSubKeyNames() ?? new string[0])
+            {
+                using var k = root.OpenSubKey(name);
+                if (!IsPlainInstallerEntry(k)) continue;
+                var command = (string)k.GetValue("UninstallString");
+                var folder = command.Substring(0, command.IndexOf("Uninstall Margin.exe", StringComparison.OrdinalIgnoreCase)).Trim('"').TrimEnd('\\');
+                if (File.Exists(Path.Combine(folder, "Margin.exe"))) return folder;
+            }
+            return DefaultDir;
+        }
+
+        static bool IsPlainInstallerEntry(RegistryKey k) =>
+            (k?.GetValue("DisplayName") as string)?.StartsWith("Margin") == true &&
+            (k.GetValue("UninstallString") as string ?? "").IndexOf("Uninstall Margin.exe", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        // The updater starts us while Margin is still shutting down, so give it a moment before forcing it.
+        public void CloseAfterWait()
+        {
+            for (int i = 0; i < 40 && RunningApps().Count > 0; i++) Thread.Sleep(250);
+            CloseRunning();
+        }
 
         // Only ever delete a folder that is empty or clearly holds a Margin install.
         public bool LooksLikeMarginInstall => File.Exists(AppExe) && File.Exists(Path.Combine(Dir, "resources", "app.asar"));
@@ -149,18 +204,21 @@ namespace MarginSetup
         {
             progress(0, "Preparing");
             if (!SafeToInstallInto) throw new IOException($"{Dir} already has other files in it. Choose an empty folder.");
-            RemoveOlderEntries();
-            DeleteDir(Dir);
-            Directory.CreateDirectory(Dir);
+            var staging = Dir.TrimEnd('\\') + ".new";
+            var previous = Dir.TrimEnd('\\') + ".old";
+            // Leftovers of an interrupted run; only this method creates these two folders.
+            DeleteDir(staging);
+            DeleteDir(previous);
+            Directory.CreateDirectory(staging);
 
             long total = 0, done = 0;
             using (var zip = new ZipArchive(new SubStream(File.OpenRead(self), Payload.ZipOffset, Payload.ZipLength), ZipArchiveMode.Read))
             {
                 total = zip.Entries.Sum(e => e.Length);
-                var root = Path.GetFullPath(Dir) + Path.DirectorySeparatorChar;
+                var root = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
                 foreach (var e in zip.Entries)
                 {
-                    var target = Path.GetFullPath(Path.Combine(Dir, e.FullName));
+                    var target = Path.GetFullPath(Path.Combine(staging, e.FullName));
                     if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue; // never write outside the install folder
                     if (e.FullName.EndsWith("/")) { Directory.CreateDirectory(target); continue; }
                     Directory.CreateDirectory(Path.GetDirectoryName(target));
@@ -172,7 +230,7 @@ namespace MarginSetup
 
             progress(0.94, "Writing the uninstaller");
             using (var src = File.OpenRead(self))
-            using (var dst = File.Create(Path.Combine(Dir, "Uninstall Margin.exe")))
+            using (var dst = File.Create(Path.Combine(staging, "Uninstall Margin.exe")))
             {
                 var buf = new byte[81920];
                 long left = Payload.StubLength;
@@ -184,6 +242,16 @@ namespace MarginSetup
                     left -= n;
                 }
             }
+
+            if (Directory.Exists(Dir)) Directory.Move(Dir, previous); // throws, changing nothing, if a file is in use
+            try { Directory.Move(staging, Dir); }
+            catch
+            {
+                if (Directory.Exists(previous)) Directory.Move(previous, Dir);
+                throw;
+            }
+            try { DeleteDir(previous); } catch { /* removed on the next install */ }
+            RemoveOlderEntries();
 
             progress(0.97, "Adding shortcuts");
             CreateShortcut(StartMenuLink);
@@ -197,6 +265,7 @@ namespace MarginSetup
                 k.SetValue("DisplayIcon", AppExe + ",0");
                 k.SetValue("InstallLocation", Dir);
                 k.SetValue("UninstallString", $"\"{Path.Combine(Dir, "Uninstall Margin.exe")}\" --uninstall");
+                k.SetValue("QuietUninstallString", $"\"{Path.Combine(Dir, "Uninstall Margin.exe")}\" --uninstall /S");
                 k.SetValue("NoModify", 1, RegistryValueKind.DWord);
                 k.SetValue("NoRepair", 1, RegistryValueKind.DWord);
                 k.SetValue("EstimatedSize", (int)(total / 1024), RegistryValueKind.DWord);

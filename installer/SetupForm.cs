@@ -22,7 +22,7 @@ namespace MarginSetup
             Ink3 = Hex("7D786E"), Rule = Hex("D9D3C5"), RuleStrong = Hex("BDB5A4"), Accent = Hex("B5462B"), MarginRule = Hex("E7C3B7"), Bad = Hex("A8362A");
 
         readonly Ops ops;
-        readonly bool uninstall;
+        readonly bool uninstall, update;
         Screen screen;
         float scale = 1;
         bool desktopShortcut = true, deleteData;
@@ -45,18 +45,20 @@ namespace MarginSetup
         readonly Font fLabel = new Font("Consolas", 10.5f, FontStyle.Regular, GraphicsUnit.Pixel);
         readonly Font fMono = new Font("Consolas", 12, FontStyle.Regular, GraphicsUnit.Pixel);
 
-        public SetupForm(Ops ops, bool uninstall)
+        public SetupForm(Ops ops, bool uninstall, bool update = false)
         {
             this.ops = ops;
             this.uninstall = uninstall;
+            this.update = update;
+            if (update) { desktopShortcut = ops.HasDesktopShortcut; status = "Preparing"; }
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.None;
             DoubleBuffered = true;
             BackColor = Bg;
-            Text = uninstall ? "Uninstall Margin" : "Margin Setup";
+            Text = uninstall ? "Uninstall Margin" : update ? "Updating Margin" : "Margin Setup";
             try { Icon = Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName); } catch { }
-            screen = uninstall ? (ops.LooksLikeMarginInstall ? Screen.ConfirmUninstall : Screen.NotInstalled) : Screen.Welcome;
+            screen = uninstall ? (ops.LooksLikeMarginInstall ? Screen.ConfirmUninstall : Screen.NotInstalled) : update ? Screen.Busy : Screen.Welcome;
             timer.Tick += (s, e) =>
             {
                 shown += (target - shown) * 0.12;
@@ -140,10 +142,17 @@ namespace MarginSetup
         void Go(Screen s) { screen = s; hover = null; primary = secondary = null; hots.Clear(); Invalidate(); }
 
         // ---------- actions ----------
+        // An update needs no questions: it starts as soon as the window appears.
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (update) { screen = Screen.Welcome; StartWork(); }
+        }
+
         void StartWork()
         {
             if (screen == Screen.Busy) return;
-            if (ops.RunningApps().Count > 0) { Go(Screen.AppRunning); return; }
+            if (!update && ops.RunningApps().Count > 0) { Go(Screen.AppRunning); return; }
             target = shown = 0;
             status = "Preparing";
             Go(Screen.Busy);
@@ -151,6 +160,7 @@ namespace MarginSetup
             Task.Run(() =>
             {
                 Action<double, string> report = (p, s) => { target = p; status = s; };
+                if (update) ops.CloseAfterWait();
                 if (uninstall) ops.Uninstall(deleteData, report);
                 else ops.Install(desktopShortcut, report);
             }).ContinueWith(t => BeginInvoke(new Action(() =>
@@ -165,7 +175,17 @@ namespace MarginSetup
                 target = shown = 1;
                 timer.Stop();
                 Go(Screen.Done);
+                if (update) ReopenSoon();
             })));
+        }
+
+        // Holds the finished screen for a moment, then brings the new version up.
+        async void ReopenSoon()
+        {
+            await Task.Delay(1400);
+            if (IsDisposed) return;
+            ops.Launch();
+            Close();
         }
 
         void PickFolder()
@@ -236,9 +256,9 @@ namespace MarginSetup
                     break;
 
                 case Screen.Busy:
-                    y = Label(g, uninstall ? "Uninstalling" : "Installing", y);
-                    y = Heading(g, uninstall ? "Removing Margin." : "Setting up your desk.", y);
-                    y = Body(g, uninstall ? "This takes a few seconds." : "Unpacking Margin. This takes under a minute.", y);
+                    y = Label(g, uninstall ? "Uninstalling" : update ? "Updating to version " + ops.Payload.Version : "Installing", y);
+                    y = Heading(g, uninstall ? "Removing Margin." : update ? "Turning the page." : "Setting up your desk.", y);
+                    y = Body(g, uninstall ? "This takes a few seconds." : update ? "Your papers and progress stay as they are. Margin reopens by itself." : "Unpacking Margin. This takes under a minute.", y);
                     Progress(g, y + 40);
                     break;
 
@@ -249,6 +269,11 @@ namespace MarginSetup
                         y = Heading(g, "Margin has been removed.", y);
                         Body(g, deleteData ? "Your papers and progress were deleted too." : "Your papers and progress are still in AppData\\Roaming\\Margin, in case you come back.", y);
                         Buttons(g, ("close", "Close", (Action)Finish));
+                    }
+                    else if (update)
+                    {
+                        y = Heading(g, "Margin is up to date.", y);
+                        Body(g, "Opening version " + ops.Payload.Version + ".", y);
                     }
                     else
                     {
@@ -286,8 +311,8 @@ namespace MarginSetup
             var mw = g.MeasureString("M", fBig, PointF.Empty, StringFormat.GenericTypographic).Width;
             g.FillRectangle(Brush(Accent), 26 + mw + 10, 196, 14, 14);
 
-            Tracked(g, uninstall ? "UNINSTALL" : "SETUP", fLabel, Ink3, 36, 392);
-            g.DrawString(uninstall ? "Thanks for\nreading with us." : "Study papers\nby playing them.", fSideLine, Brush(Ink), 34, 410);
+            Tracked(g, uninstall ? "UNINSTALL" : update ? "UPDATE" : "SETUP", fLabel, Ink3, 36, 392);
+            g.DrawString(uninstall ? "Thanks for\nreading with us." : update ? "A fresh edition\nis on its way." : "Study papers\nby playing them.", fSideLine, Brush(Ink), 34, 410);
         }
 
         void CloseButton(Graphics g)

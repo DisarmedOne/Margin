@@ -15,6 +15,7 @@ function start() {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.disableDifferentialDownload = true; // releases carry no blockmap
   autoUpdater.logger = console;
 
   autoUpdater.on('download-progress', (p) => progress(p.percent / 100));

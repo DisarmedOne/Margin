@@ -1,8 +1,0 @@
-D:\Margin\installer\obj\Release\net48\MarginSetup.csproj.AssemblyReference.cache
-D:\Margin\installer\obj\Release\net48\MarginSetup.GeneratedMSBuildEditorConfig.editorconfig
-D:\Margin\installer\obj\Release\net48\MarginSetup.AssemblyInfoInputs.cache
-D:\Margin\installer\obj\Release\net48\MarginSetup.AssemblyInfo.cs
-D:\Margin\installer\obj\Release\net48\MarginSetup.csproj.CoreCompileInputs.cache
-D:\Margin\installer\bin\out\MarginSetup.exe.config
-D:\Margin\installer\bin\out\MarginSetup.exe
-D:\Margin\installer\obj\Release\net48\MarginSetup.exe

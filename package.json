@@ -1,7 +1,7 @@
 {
     "name": "margin",
     "productName": "Margin",
-    "version": "1.5.2",
+    "version": "1.5.3",
     "description": "Turn any paper into short, game-like study levels.",
     "main": "src/main/main.js",
     "private": true,
@@ -9,7 +9,7 @@
         "start": "electron .",
         "test": "node --test src/main/",
         "icon": "electron build/make-icon.js",
-        "dist": "electron-builder --win dir && powershell -NoProfile -ExecutionPolicy Bypass -File build/make-installer.ps1"
+        "dist": "electron-builder --win dir --publish never && powershell -NoProfile -ExecutionPolicy Bypass -File build/make-installer.ps1"
     },
     "license": "UNLICENSED",
     "type": "commonjs",
@@ -42,11 +42,6 @@
         "win": {
             "target": "dir",
             "icon": "build/icon.png"
-        },
-        "nsis": {
-            "artifactName": "Margin-Setup-${version}.${ext}",
-            "oneClick": true,
-            "perMachine": false
         },
         "publish": {
             "provider": "github",
