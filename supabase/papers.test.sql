@@ -43,6 +43,15 @@ begin
   perform set_config('request.jwt.claim.sub', bob::text, true);
   assert public.paper_status() ->> 'used' = '0', 'separate people, separate counts';
 
+  -- An account marked unlimited goes past three; nobody can mark themselves
+  insert into public.paper_unlimited (user_id) values (bob);
+  for i in 1..5 loop
+    assert not public.paper_claim(repeat(i::text, 64)) ? 'error', 'unlimited account is never full';
+  end loop;
+  assert (public.paper_status() ->> 'unlimited')::boolean, 'says so';
+  assert not has_table_privilege('authenticated', 'public.paper_unlimited', 'insert'), 'nobody can lift their own limit';
+  assert not has_function_privilege('authenticated', 'public.paper_is_unlimited()', 'execute'), 'unlimited helper closed';
+
   assert not has_table_privilege('authenticated', 'public.paper_usage', 'select'), 'counts closed';
   assert not has_table_privilege('authenticated', 'public.paper_secret', 'select'), 'secret closed';
   assert not has_function_privilege('anon', 'public.paper_claim(text)', 'execute'), 'signed-out users cannot call';

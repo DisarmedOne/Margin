@@ -72,7 +72,7 @@ export default function library(root, S, ctx) {
 function paperQuota() {
   const box = h('section.quota', { style: 'display: none' });
   window.margin.paperUsage().then((r) => {
-    if (!r.ok) return;
+    if (!r.ok || r.data.unlimited) return;
     const { used, max } = r.data;
     box.classList.toggle('full', used >= max);
     box.replaceChildren(

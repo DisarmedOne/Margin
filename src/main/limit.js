@@ -37,7 +37,7 @@ function client(getToken) {
     // Before reading: is there a place for this file? `pending` counts other files still being read.
     async check(key, pending = 0) {
       const r = await call('paper_status', { p_fingerprint: key });
-      if (!r.known && r.used + pending >= r.max) throw full(r.max);
+      if (!r.unlimited && !r.known && r.used + pending >= r.max) throw full(r.max);
       return r.known;
     },
     // After reading: take the place.
@@ -63,8 +63,12 @@ function local(used, save, max = FREE_PAPERS) {
       return known;
     },
     async claim(key) {
+      if (!used().includes(key) && used().length >= max) throw refuse();
+      return this.record(key);
+    },
+    // Counts a paper without asking whether there is room, for accounts without a limit.
+    async record(key) {
       if (!used().includes(key)) {
-        if (used().length >= max) throw refuse();
         used().push(key);
         await save();
       }
@@ -78,17 +82,21 @@ function both(here, server) {
   return {
     async usage() {
       const [a, b] = [await here.usage(), await server.usage()];
+      if (b.unlimited) return { used: a.used, max: a.max, unlimited: true };
       return { used: Math.max(a.used, b.used), max: Math.min(a.max, b.max) };
     },
     async check(key, pending = 0) {
+      if ((await server.usage()).unlimited) return server.check(key, pending);
       const knownHere = await here.check(key, pending);
       const knownThere = await server.check(key, pending);
       return knownHere && knownThere;
     },
     async claim(key) {
-      await here.check(key); // refused here, so no place is spent on the account
+      // The account decides whether it has no limit at all.
+      const unlimited = (await server.usage()).unlimited;
+      if (!unlimited) await here.check(key); // refused here, so no place is spent on the account
       await server.claim(key);
-      return here.claim(key);
+      return here.record(key);
     },
   };
 }

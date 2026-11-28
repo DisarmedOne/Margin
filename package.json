@@ -1,7 +1,7 @@
 {
     "name": "margin",
     "productName": "Margin",
-    "version": "1.10.0",
+    "version": "1.10.1",
     "description": "Turn any paper into short, game-like study levels.",
     "main": "src/main/main.js",
     "private": true,

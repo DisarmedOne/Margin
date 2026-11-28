@@ -29,6 +29,14 @@ create table if not exists public.paper_secret (
 );
 insert into public.paper_secret default values on conflict do nothing;
 
+-- Accounts without a limit. As with admins, only the SQL Editor can add one:
+--   insert into public.paper_unlimited (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;
+create table if not exists public.paper_unlimited (
+  user_id uuid primary key references auth.users (id) on delete cascade
+);
+alter table public.paper_unlimited enable row level security;
+revoke all on public.paper_unlimited from anon, authenticated;
+
 alter table public.paper_usage enable row level security;
 alter table public.paper_secret enable row level security;
 revoke all on public.paper_usage, public.paper_secret from anon, authenticated;
@@ -74,6 +82,11 @@ begin
   return sha256(p_email_key || convert_to(p_fingerprint, 'UTF8'));
 end $$;
 
+create or replace function public.paper_is_unlimited() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.paper_unlimited where user_id = auth.uid())
+$$;
+
 -- ---------- called by the app ----------
 -- How many places are used, and whether this file already has one. Changes nothing.
 create or replace function public.paper_status(p_fingerprint text default null) returns jsonb
@@ -83,6 +96,7 @@ begin
   return jsonb_build_object(
     'used', public.paper_count(v_me),
     'max', public.paper_max(),
+    'unlimited', public.paper_is_unlimited(),
     'known', p_fingerprint is not null and exists (
       select 1 from public.paper_usage where email_key = v_me and paper_key = public.paper_file_key(v_me, p_fingerprint))
   );
@@ -98,7 +112,7 @@ begin
   -- One claim at a time per address, so two at once cannot both take the last place.
   perform pg_advisory_xact_lock(hashtextextended(encode(v_me, 'hex'), 0));
   if not exists (select 1 from public.paper_usage where email_key = v_me and paper_key = v_paper) then
-    if public.paper_count(v_me) >= public.paper_max() then
+    if not public.paper_is_unlimited() and public.paper_count(v_me) >= public.paper_max() then
       return jsonb_build_object('error', 'full', 'used', public.paper_count(v_me), 'max', public.paper_max());
     end if;
     insert into public.paper_usage (email_key, paper_key) values (v_me, v_paper);
@@ -108,7 +122,7 @@ end $$;
 
 revoke all on function
   public.paper_max(), public.paper_email_key(text), public.paper_me(), public.paper_count(bytea),
-  public.paper_file_key(bytea, text), public.paper_status(text), public.paper_claim(text)
+  public.paper_file_key(bytea, text), public.paper_is_unlimited(), public.paper_status(text), public.paper_claim(text)
 from public, anon, authenticated;
 grant execute on function public.paper_status(text), public.paper_claim(text) to authenticated;
 

@@ -21,6 +21,19 @@ test('signing in or out never gives free papers back', async () => {
   assert.deepEqual(here, []);
 });
 
+test('an account without a limit is not held back by this computer, and only while signed in', async () => {
+  const here = ['a', 'b', 'c'];
+  const computer = local(() => here, async () => {});
+  const claimed = [];
+  const server = { usage: async () => ({ used: 9, max: 3, unlimited: true }), check: async () => false, claim: async (k) => claimed.push(k) };
+  const signedIn = both(computer, server);
+  assert.equal((await signedIn.usage()).unlimited, true);
+  assert.equal(await signedIn.check('d'), false);
+  await signedIn.claim('d');
+  assert.deepEqual(claimed, ['d']);
+  await assert.rejects(computer.claim('e'), { code: 'LIMIT' }, 'signed out, the limit is back');
+});
+
 test('without an account, three different files are counted on this computer', async () => {
   const used = [];
   const limit = local(() => used, async () => {});

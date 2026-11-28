@@ -93,12 +93,30 @@ function render() {
     view.scrollTop = 0;
     document.getElementById('shell').classList.toggle('focus', FOCUS.has(S.route.name));
     renderSidebar();
+    checkPlan();
     cleanup = views[S.route.name](view, S, ctx) || null;
   };
   // Cross-fade between pages instead of snapping; the sidebar stays put (see ::view-transition in styles.css).
   const animate = document.startViewTransition && !document.documentElement.classList.contains('reduce-motion');
   if (animate) document.startViewTransition(swap);
   else swap();
+}
+
+// Asked again only when the signed-in account changes.
+let planFor = null;
+function checkPlan() {
+  const who = S.account?.email ?? '';
+  if (who === planFor) return;
+  planFor = who;
+  const had = S.unlimited;
+  S.unlimited = false;
+  if (had) renderSidebar();
+  if (!who) return;
+  window.margin.paperUsage().then((r) => {
+    if (planFor !== who || !r.ok || !r.data.unlimited) return;
+    S.unlimited = true;
+    renderSidebar();
+  });
 }
 
 function renderSidebar() {
@@ -148,8 +166,8 @@ function renderSidebar() {
             h('span', {}, timer.state.left !== null ? t('Paused') : timer.state.phase === 'break' ? t('Break') : t('Focusing')),
             h('b', { 'data-focus-time': '' }, timer.left()),
           ),
-      // Everyone is on the free plan until paid plans exist.
-      h(
+      // Everyone is on the free plan until paid plans exist, except accounts without a limit.
+      S.unlimited ? null : h(
         'div.plan',
         {},
         h('span.label', {}, t('Free plan')),
