@@ -143,4 +143,50 @@ async function readPptx(buffer) {
   return out.join('\n\n');
 }
 
-module.exports = { htmlToText, readHtml, readMhtml, readPptx };
+const MAX_SHEETS = 50;
+
+// "B7" -> 1. Used to keep empty cells, so columns stay lined up.
+const column = (ref = '') => [...ref.replace(/\d+$/, '')].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+// All the text runs in a piece of a workbook, without the reading guides some languages add.
+const runs = (xml) => decodeEntities([...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?>([^<]*)<\/t>/g)].map((m) => m[1]).join(''));
+
+// Cell values sheet by sheet, one line per row. Formulas give their saved result. Charts and pictures are not read.
+// shortcut: cell formats are ignored, so dates appear as Excel's day numbers; read styles.xml if that hurts lessons.
+async function readXlsx(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const workbook = await zip.file('xl/workbook.xml')?.async('string');
+  if (!workbook) throw new Error('not an Excel file');
+  const targets = new Map((await relations(zip, 'xl/_rels/workbook.xml.rels', 'xl')).map((r) => [r.id, r.path]));
+  const shared = [...((await zip.file('xl/sharedStrings.xml')?.async('string')) ?? '').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => runs(m[1]));
+  const out = [];
+  let length = 0;
+  for (const [tag] of [...workbook.matchAll(/<sheet\b[^>]*>/g)].slice(0, MAX_SHEETS)) {
+    const xml = await zip.file(targets.get(attr(tag, 'r:id')) ?? '')?.async('string');
+    if (!xml) continue;
+    const lines = [];
+    for (const [, row] of xml.matchAll(/<row\b[^>]*?(?<!\/)>([\s\S]*?)<\/row>/g)) {
+      const cells = [];
+      for (const [, attrs, inner = ''] of row.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const type = attr(attrs, 't');
+        const raw = inner.match(/<v>([^<]*)<\/v>/)?.[1];
+        let value = '';
+        if (type === 'inlineStr') value = runs(inner);
+        else if (raw !== undefined) value = type === 's' ? (shared[Number(raw)] ?? '') : type === 'b' ? (raw === '1' ? 'TRUE' : 'FALSE') : decodeEntities(raw);
+        const at = column(attr(attrs, 'r'));
+        // A far-off column is not padded out cell by cell.
+        while (at > cells.length && at < 200) cells.push('');
+        cells.push(value.replace(/\s+/g, ' ').trim());
+      }
+      const line = cells.join(' | ').replace(/(?:\s*\|\s*)+$/, '');
+      if (!line.trim()) continue;
+      lines.push(line);
+      length += line.length;
+      if (length > MAX_CHARS) break;
+    }
+    if (lines.length) out.push([`Sheet: ${decodeEntities(attr(tag, 'name') ?? '')}`, ...lines].join('\n'));
+    if (length > MAX_CHARS) break;
+  }
+  return out.join('\n\n');
+}
+
+module.exports = { htmlToText, readHtml, readMhtml, readPptx, readXlsx };

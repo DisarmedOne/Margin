@@ -19,7 +19,8 @@ contextBridge.exposeInMainWorld('margin', {
   signOut: () => call('account:signout'),
   deleteAccount: () => call('account:delete'),
   pickFiles: () => call('papers:pick'),
-  addPaper: (path) => call('papers:add', path),
+  addPaper: (paths, options) => call('papers:add', paths, options),
+  inspectFiles: (paths) => call('papers:inspect', paths),
   paperUsage: () => call('papers:usage'),
   getPaper: (id) => call('papers:get', id),
   retryPaper: (id) => call('papers:retry', id),
@@ -57,6 +58,7 @@ contextBridge.exposeInMainWorld('margin', {
   openConsole: (provider) => call('open:console', provider),
   openData: () => call('open:data'),
   openPrivacy: () => call('open:privacy'),
+  openPricing: () => call('open:pricing'),
   openTerms: () => call('open:terms'),
   onUpdate: (cb) => {
     ipcRenderer.on('update-ready', (_e, update) => cb(update));

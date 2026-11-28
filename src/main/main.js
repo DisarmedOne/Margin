@@ -2,23 +2,19 @@ const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, nativeTheme, Me
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
-const mammoth = require('mammoth');
 const store = require('./store');
 const ai = require('./ai');
 const srs = require('./srs');
 const updater = require('./updater');
 const account = require('./account');
+const sources = require('./sources');
 const studyGroups = require('./groups');
 const { cardsCsv } = require('./cards-csv');
 const exam = require('./exam');
-const extract = require('./extract');
 const deck = require('./deck');
 const paperLimit = require('./limit');
 
-const MAX_BYTES = 30 * 1024 * 1024; // Claude's request limit is 32 MB including base64 overhead headroom
 // Slide files are mostly pictures, which are not sent anywhere, so they may be much bigger.
-const MAX_PPTX_BYTES = 100 * 1024 * 1024;
-const ACCEPTED = ['.pdf', '.docx', '.pptx', '.html', '.htm', '.mhtml', '.mht', '.txt', '.md'];
 const BAR = { light: { color: '#F2EFE7', symbolColor: '#45423C' }, dark: { color: '#161513', symbolColor: '#BDB7AA' } };
 
 let win;
@@ -122,9 +118,8 @@ const providerList = () =>
 
 // ---------- Papers ----------
 async function loadDoc(paper) {
-  const dir = store.paperDir(paper.id);
-  if (paper.kind === 'pdf') return { kind: 'pdf', data: (await fs.readFile(path.join(dir, 'source.pdf'))).toString('base64') };
-  return { kind: 'text', data: await fs.readFile(path.join(dir, 'source.txt'), 'utf8') };
+  const doc = await sources.load(paper.kind, store.paperDir(paper.id));
+  return { ...doc, goal: paper.goal, note: paper.note };
 }
 
 // Files that passed the check but have no place yet, so several added at once cannot all use the last one.
@@ -141,59 +136,31 @@ function reserve(key) {
   return run;
 }
 
-async function textOf(filePath, ext) {
-  if (ext === '.docx') return (await mammoth.extractRawText({ path: filePath })).value;
-  if (ext === '.pptx') {
-    try {
-      return await extract.readPptx(await fs.readFile(filePath));
-    } catch {
-      throw new ai.MarginError('TYPE', 'Could not open this PowerPoint file. Save it again as .pptx and retry.');
-    }
-  }
-  if (ext === '.html' || ext === '.htm') return extract.readHtml(await fs.readFile(filePath));
-  if (ext === '.mhtml' || ext === '.mht') return extract.readMhtml(await fs.readFile(filePath));
-  return fs.readFile(filePath, 'utf8');
-}
+const GOALS = ['exam', 'understand', 'refresh'];
 
-async function addPaper(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (!ACCEPTED.includes(ext)) {
-    throw new ai.MarginError('TYPE', 'Margin reads PDF, Word (.docx), PowerPoint (.pptx), saved web pages, Markdown and plain text files.');
-  }
-  const stat = await fs.stat(filePath);
-  if (ext === '.pptx') {
-    if (stat.size > MAX_PPTX_BYTES) throw new ai.MarginError('TOO_BIG', 'This PowerPoint is over 100 MB. Try a smaller copy.');
-  } else if (stat.size > MAX_BYTES) throw new ai.MarginError('TOO_BIG', 'This file is over 30 MB. Try a smaller copy.');
-
+// One file or several become one paper, which takes one place.
+async function addPaper(filePaths, options) {
+  const paths = [].concat(filePaths).filter((p) => typeof p === 'string');
   const id = crypto.randomUUID();
   const dir = store.paperDir(id);
   await fs.mkdir(dir, { recursive: true });
-  let kind = 'pdf';
-  let fingerprint;
+  let stored;
   try {
-    if (ext === '.pdf') {
-      await fs.copyFile(filePath, path.join(dir, 'source.pdf'));
-      fingerprint = paperLimit.fingerprint(await fs.readFile(path.join(dir, 'source.pdf')));
-    } else {
-      kind = 'text';
-      const text = await textOf(filePath, ext);
-      if (text.trim().length < 400) {
-        throw new ai.MarginError('EMPTY', 'This file has almost no text in it. Margin needs at least a few paragraphs.');
-      }
-      await fs.writeFile(path.join(dir, 'source.txt'), text);
-      fingerprint = paperLimit.fingerprint(text);
-    }
-    await reserve(fingerprint);
+    stored = await sources.store(paths, dir);
+    await reserve(stored.fingerprint);
   } catch (e) {
     await fs.rm(dir, { recursive: true, force: true });
     throw e;
   }
 
+  const first = path.basename(paths[0]);
   const paper = {
     id,
-    fileName: path.basename(filePath),
-    kind,
-    fingerprint,
+    fileName: stored.files > 1 ? `${first} +${stored.files - 1}` : first,
+    kind: stored.kind,
+    fingerprint: stored.fingerprint,
+    goal: GOALS.includes(options?.goal) ? options.goal : null,
+    note: typeof options?.note === 'string' ? options.note.trim().slice(0, 300) : '',
     addedAt: Date.now(),
     touchedAt: Date.now(),
     status: 'reading',
@@ -208,6 +175,21 @@ async function addPaper(filePath) {
   runOutline(paper);
   return publicPaper(paper);
 }
+
+// Tells the upload screen which chosen files can be used, before anything is added.
+const inspectFiles = (paths) =>
+  Promise.all(
+    [].concat(paths).slice(0, 50).map(async (filePath) => {
+      const name = path.basename(String(filePath));
+      try {
+        const { size, ext } = await sources.checkFile(String(filePath));
+        return { path: filePath, name, ext, size };
+      } catch (e) {
+        const f = ai.friendly(e);
+        return { path: filePath, name, error: f.message, errorKey: f.tkey ?? null, errorVars: f.vars ?? null };
+      }
+    }),
+  );
 
 async function runOutline(paper) {
   paper.status = 'reading';
@@ -617,8 +599,30 @@ async function accessToken() {
 const groupsApi = studyGroups.client(accessToken, () => S().profile);
 const limitApi = paperLimit.client(accessToken);
 const guestLimit = paperLimit.local(() => S().guestPapers, () => store.save());
-// Signed in, the server counts; without an account, this computer does.
-const limiter = () => (S().account ? limitApi : guestLimit);
+// This computer always counts; signed in, the account counts too.
+const limiter = () => (S().account ? paperLimit.both(guestLimit, limitApi) : guestLimit);
+
+// Papers already in the library count on this computer, including ones added before it kept count.
+async function countLibrary() {
+  let changed = false;
+  for (const paper of S().papers) {
+    if (paper.status !== 'ready') continue;
+    let key = paper.fingerprint;
+    if (!key) {
+      // Added before papers had a fingerprint: made the same way as for a new file.
+      const file = path.join(store.paperDir(paper.id), paper.kind === 'pdf' ? 'source.pdf' : 'source.txt');
+      const content = await fs.readFile(file, paper.kind === 'pdf' ? undefined : 'utf8').catch(() => null);
+      if (content === null) continue;
+      key = paper.fingerprint = paperLimit.fingerprint(content);
+      changed = true;
+    }
+    if (!S().guestPapers.includes(key)) {
+      S().guestPapers.push(key);
+      changed = true;
+    }
+  }
+  if (changed) await store.save();
+}
 
 // Remembers whether this account is in a group, so study numbers are only ever sent by someone who is.
 async function groupResult(work) {
@@ -751,11 +755,12 @@ function registerIpc() {
     const r = await dialog.showOpenDialog(win, {
       title: 'Add a paper',
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Papers', extensions: ACCEPTED.map((e) => e.slice(1)) }],
+      filters: [{ name: 'Papers', extensions: sources.ACCEPTED.map((e) => e.slice(1)) }],
     });
     return r.canceled ? [] : r.filePaths;
   });
   handle('papers:add', addPaper);
+  handle('papers:inspect', inspectFiles);
   handle('papers:usage', () => limiter().usage());
   handle('papers:get', (id) => publicPaper(findPaper(id)));
   handle('papers:retry', (id) => {
@@ -807,6 +812,7 @@ function registerIpc() {
   handle('cards:save', saveCard);
   handle('cards:remove', removeCard);
   handle('update:check', () => updater.check());
+  handle('open:pricing', () => shell.openExternal('https://steelfable.com/pricing/'));
   handle('open:support', () => shell.openExternal('mailto:support@steelfable.com'));
   handle('open:website', () => shell.openExternal('https://steelfable.com/margin/'));
   handle('update:pending', () => updater.pending());
@@ -818,6 +824,7 @@ function registerIpc() {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   await store.load();
+  await countLibrary();
   const st = S().settings;
   if (st.apiKey) {
     // 1.0.0 stored a single Anthropic key.

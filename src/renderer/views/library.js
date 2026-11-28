@@ -31,7 +31,7 @@ export default function library(root, S, ctx) {
         h('p.label', {}, `${t('Library')} · ${tn(finishedChapters, '{n} chapter finished|{n} chapters finished')}`),
         h('h1.h1', {}, t('Your papers')),
       ),
-      h('button.btn', { onclick: ctx.pickFiles }, iconEl('plus'), t('Add paper')),
+      h('button.btn', { onclick: ctx.addPaper }, iconEl('plus'), t('Add paper')),
     ),
     paperQuota(),
   );
@@ -76,9 +76,11 @@ function paperQuota() {
     const { used, max } = r.data;
     box.classList.toggle('full', used >= max);
     box.replaceChildren(
-      h('p.h3', {}, t('{n} of {max} papers used', { n: used, max })),
+      // Papers from before the limit was lowered can leave someone above it.
+      h('p.h3', {}, t('{n} of {max} free papers used', { n: Math.min(used, max), max })),
       h('div.segments', { 'aria-hidden': 'true' }, Array.from({ length: max }, (_, i) => h(`i${i < used ? '.done' : ''}`))),
       h('p.small', {}, t('Removing a paper does not free its place.')),
+      h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick: () => window.margin.openPricing() }, t('Upgrade'))),
     );
     box.style.display = '';
   });
@@ -232,10 +234,10 @@ function emptyLibrary(S, ctx) {
     h(
       'div.stack',
       { style: '--gap: var(--s1)' },
-      h('p.h3', {}, t('Drop a paper, slides or a saved web page here')),
-      h('p.small', {}, t('PDF, Word, PowerPoint, saved web pages and text files. From slides and web pages, only the text is read.')),
+      h('p.h3', {}, t('Drop your files here')),
+      h('p.small', {}, t('PDF, Word, PowerPoint, Excel, pictures, saved web pages and text files. Not sound or video.')),
     ),
-    h('button.btn', { onclick: ctx.pickFiles }, t('Choose a file')),
+    h('button.btn', { onclick: ctx.addPaper }, t('Add paper')),
   );
   return h(
     'div.empty',

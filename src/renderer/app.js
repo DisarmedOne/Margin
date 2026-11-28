@@ -9,10 +9,13 @@ import progress from './views/progress.js';
 import settings from './views/settings.js';
 import exams from './views/exams.js';
 import signin from './views/signin.js';
+import add from './views/add.js';
+import practice from './views/practice.js';
+import { timer } from './focus.js';
 import groups from './views/groups.js';
 import cards from './views/cards.js';
 
-const views = { welcome, library, paper, level, review, progress, settings, exams, signin, groups, cards };
+const views = { add, practice, welcome, library, paper, level, review, progress, settings, exams, signin, groups, cards };
 const FOCUS = new Set(['signin', 'welcome', 'level']);
 
 const S = { settings: null, key: null, profile: null, papers: [], providers: {}, languages: {}, route: { name: 'library' } };
@@ -65,26 +68,17 @@ const ctx = {
     if (i >= 0) S.papers[i] = p;
     else S.papers.unshift(p);
   },
-  async addFiles(paths) {
-    let added = 0;
-    for (const p of paths) {
-      try {
-        ctx.upsertPaper(await api(window.margin.addPaper(p)));
-        added++;
-      } catch (e) {
-        toast(e.message);
-      }
-    }
-    if (added) ctx.go({ name: 'library' });
+  // Dropped files go to the upload walkthrough.
+  addFiles(paths) {
+    ctx.go({ name: 'add', paths });
   },
   async removePaper(id) {
     ctx.setProfile(await api(window.margin.removePaper(id)));
     S.papers = S.papers.filter((p) => p.id !== id);
     ctx.go({ name: 'library' });
   },
-  async pickFiles() {
-    const paths = await api(window.margin.pickFiles());
-    if (paths.length) await ctx.addFiles(paths);
+  addPaper() {
+    ctx.go({ name: 'add' });
   },
 };
 
@@ -115,7 +109,7 @@ function renderSidebar() {
     h(
       'button',
       {
-        'aria-current': S.route.name === name || (name === 'library' && S.route.name === 'paper') || (name === 'review' && S.route.name === 'cards') ? 'page' : null,
+        'aria-current': S.route.name === name || (name === 'library' && (S.route.name === 'paper' || S.route.name === 'add')) || (name === 'review' && S.route.name === 'cards') ? 'page' : null,
         onclick: () => ctx.go({ name }),
       },
       iconEl(ic),
@@ -137,6 +131,7 @@ function renderSidebar() {
       navItem('library', t('Library'), 'library'),
       navItem('review', t('Review'), 'review', p.due),
       navItem('exams', t('Exams'), 'exams'),
+      navItem('practice', t('Study tools'), 'timer'),
       navItem('groups', t('Groups'), 'groups'),
       navItem('progress', t('Progress'), 'progress'),
       navItem('settings', t('Settings'), 'settings'),
@@ -144,6 +139,22 @@ function renderSidebar() {
     h(
       'div.sidecard',
       {},
+      // Shown while the focus timer runs; leads back to it.
+      timer.state.phase === 'idle'
+        ? null
+        : h(
+            'button.focuschip',
+            { type: 'button', onclick: () => ctx.go({ name: 'practice' }) },
+            h('span', {}, timer.state.left !== null ? t('Paused') : timer.state.phase === 'break' ? t('Break') : t('Focusing')),
+            h('b', { 'data-focus-time': '' }, timer.left()),
+          ),
+      // Everyone is on the free plan until paid plans exist.
+      h(
+        'div.plan',
+        {},
+        h('span.label', {}, t('Free plan')),
+        h('button.btn.sm', { type: 'button', onclick: () => window.margin.openPricing() }, t('Upgrade')),
+      ),
       h(
         `div.goal${met ? '.met' : ''}`,
         { title: met ? t('Daily goal reached') : t("{n} XP to today's goal", { n: goal - today }) },
@@ -245,6 +256,17 @@ async function boot() {
   });
 
   wireDragDrop();
+  window.addEventListener('focus-change', renderSidebar);
+  setInterval(() => {
+    const event = timer.tick();
+    if (event) {
+      sound.done();
+      toast(event === 'break' ? t('25 minutes done. Take a 5 minute break.') : t('Break over. Start the next round when you are ready.'));
+      window.dispatchEvent(new Event('focus-change'));
+    } else if (timer.state.phase !== 'idle') {
+      for (const el of document.querySelectorAll('[data-focus-time]')) el.textContent = timer.left();
+    }
+  }, 500);
   translateStatic();
   ctx.enter();
   window.margin.onUpdate(showUpdate);

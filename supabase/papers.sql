@@ -1,7 +1,7 @@
 -- Margin paper limit. Run the whole file once in Supabase: SQL Editor > New query > Run.
 -- It is safe to run again after an update, and doing so keeps the counts.
 --
--- Each email address can have 5 different papers read, ever. Removing a paper, reinstalling Margin
+-- Each email address can have 3 different papers read, ever. Removing a paper, reinstalling Margin
 -- or deleting the account does not give a place back. To change the number, edit paper_max below
 -- and run the file again.
 --
@@ -35,7 +35,7 @@ revoke all on public.paper_usage, public.paper_secret from anon, authenticated;
 
 -- ---------- helpers (not callable from outside) ----------
 create or replace function public.paper_max() returns integer
-language sql immutable set search_path = '' as $$ select 5 $$;
+language sql immutable set search_path = '' as $$ select 3 $$;
 
 -- Spellings that reach the same inbox count as one: capitals, "+anything", and dots in Gmail addresses.
 create or replace function public.paper_email_key(p_email text) returns bytea

@@ -1,5 +1,6 @@
-// The per-account paper limit. The count lives in the database (supabase/papers.sql), so
-// reinstalling Margin cannot reset it. Only a fingerprint of the file is sent, never the file.
+// The free paper limit. Every paper counts on this computer, so signing out gives nothing back.
+// With an account it must also fit in the account's count in the database (supabase/papers.sql),
+// which reinstalling Margin cannot reset. Only a fingerprint of the file is sent, never the file.
 const crypto = require('node:crypto');
 const { MarginError } = require('./ai');
 const account = require('./account');
@@ -48,9 +49,11 @@ function client(getToken) {
   };
 }
 
-// Without an account the count is kept on this computer, in the list `used()` returns.
+const FREE_PAPERS = 3; // the same number as paper_max() in supabase/papers.sql
+
+// This computer's count, in the list `used()` returns.
 // shortcut: deleting Margin's data resets it; a shared AI key must require an account and count on the server.
-function local(used, save, max = 5) {
+function local(used, save, max = FREE_PAPERS) {
   const refuse = () => new MarginError('LIMIT', 'You have used all {max} papers. Papers you already added still work.', { max });
   return {
     usage: async () => ({ used: used().length, max }),
@@ -70,4 +73,24 @@ function local(used, save, max = 5) {
   };
 }
 
-module.exports = { client, local, fingerprint };
+// Signed in: a paper needs a free place on this computer and on the account.
+function both(here, server) {
+  return {
+    async usage() {
+      const [a, b] = [await here.usage(), await server.usage()];
+      return { used: Math.max(a.used, b.used), max: Math.min(a.max, b.max) };
+    },
+    async check(key, pending = 0) {
+      const knownHere = await here.check(key, pending);
+      const knownThere = await server.check(key, pending);
+      return knownHere && knownThere;
+    },
+    async claim(key) {
+      await here.check(key); // refused here, so no place is spent on the account
+      await server.claim(key);
+      return here.claim(key);
+    },
+  };
+}
+
+module.exports = { FREE_PAPERS, client, local, both, fingerprint };

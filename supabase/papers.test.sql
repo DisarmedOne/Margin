@@ -18,13 +18,13 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', ann, 'role', 'authenticated')::text, true);
   perform set_config('request.jwt.claim.sub', ann::text, true);
   assert public.paper_status() ->> 'used' = '0', 'starts empty';
-  for i in 1..5 loop
+  for i in 1..3 loop
     r := public.paper_claim(repeat(i::text, 64));
     assert (r ->> 'used')::int = i and not r ? 'error', 'claim counts';
   end loop;
-  assert public.paper_claim(repeat('6', 64)) ->> 'error' = 'full', 'sixth is refused';
+  assert public.paper_claim(repeat('6', 64)) ->> 'error' = 'full', 'fourth is refused';
   r := public.paper_claim(repeat('1', 64));
-  assert not r ? 'error' and r ->> 'used' = '5', 'the same file takes no second place';
+  assert not r ? 'error' and r ->> 'used' = '3', 'the same file takes no second place';
   assert (public.paper_status(repeat('1', 64)) ->> 'known')::boolean, 'known file';
   assert not (public.paper_status(repeat('7', 64)) ->> 'known')::boolean, 'unknown file';
   stopped := false;
@@ -36,9 +36,9 @@ begin
   insert into auth.users (id, aud, role, email) values (again, 'authenticated', 'authenticated', 'A.N.N' || tag || '+new@googlemail.com');
   perform set_config('request.jwt.claims', json_build_object('sub', again, 'role', 'authenticated')::text, true);
   perform set_config('request.jwt.claim.sub', again::text, true);
-  assert public.paper_status() ->> 'used' = '5', 'count survives deletion and respelling';
+  assert public.paper_status() ->> 'used' = '3', 'count survives deletion and respelling';
 
-  -- Bob has his own five
+  -- Bob has his own three
   perform set_config('request.jwt.claims', json_build_object('sub', bob, 'role', 'authenticated')::text, true);
   perform set_config('request.jwt.claim.sub', bob::text, true);
   assert public.paper_status() ->> 'used' = '0', 'separate people, separate counts';

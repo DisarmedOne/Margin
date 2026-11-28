@@ -205,6 +205,7 @@ export default function settings(root, S, ctx) {
   const button = (label, onclick, attrs = {}) => h('div', {}, h('button.btn.sm.secondary', { type: 'button', onclick, ...attrs }, label));
 
   const accountRows = () => [
+        row(t('Your plan'), t('Free plan. Paid plans are not available yet.'), button(t('Upgrade'), () => window.margin.openPricing())),
         row(
           t('Steelfable account'),
           t('Your papers and progress stay on this computer.'),

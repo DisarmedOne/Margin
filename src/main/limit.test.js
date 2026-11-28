@@ -1,13 +1,32 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { client, local, fingerprint } = require('./limit');
+const { client, local, both, fingerprint } = require('./limit');
 
-test('without an account, five different files are counted on this computer', async () => {
+test('signing in or out never gives free papers back', async () => {
+  const here = [];
+  const computer = local(() => here, async () => {});
+  const account = (list) => both(computer, local(() => list, async () => {}));
+  const ann = [];
+  await account(ann).claim('a');
+  await account(ann).claim('b');
+  assert.deepEqual(await computer.usage(), { used: 2, max: 3 }, 'signed out, the count stays');
+  await computer.claim('c');
+  assert.equal((await account(ann).usage()).used, 3);
+  await assert.rejects(account(ann).claim('d'), { code: 'LIMIT' });
+  assert.deepEqual(ann, ['a', 'b'], 'a refused paper costs the account nothing');
+  await assert.rejects(account([]).check('d'), { code: 'LIMIT' }, 'a new account on the same computer gets nothing new');
+  const fullElsewhere = ['x', 'y', 'z'];
+  here.length = 0;
+  await assert.rejects(account(fullElsewhere).claim('d'), { code: 'LIMIT' }, 'a full account stays full on a new computer');
+  assert.deepEqual(here, []);
+});
+
+test('without an account, three different files are counted on this computer', async () => {
   const used = [];
   const limit = local(() => used, async () => {});
-  for (const k of ['a', 'b', 'c', 'd', 'e']) await limit.claim(k);
+  for (const k of ['a', 'b', 'c']) await limit.claim(k);
   await limit.claim('a');
-  assert.deepEqual(await limit.usage(), { used: 5, max: 5 });
+  assert.deepEqual(await limit.usage(), { used: 3, max: 3 });
   assert.equal(await limit.check('a'), true);
   await assert.rejects(limit.check('f'), { code: 'LIMIT' });
   await assert.rejects(limit.claim('f'), { code: 'LIMIT' });

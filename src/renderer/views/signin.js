@@ -20,7 +20,7 @@ export default function signin(root, S, ctx) {
     {
       type: 'button',
       onclick: async () => {
-        if (!adult) return;
+        if (!adult) return nudge();
         try {
           S.guest = await api(window.margin.skipSignIn());
           ctx.enter();
@@ -35,14 +35,29 @@ export default function signin(root, S, ctx) {
     type: 'checkbox',
     onchange: (e) => {
       adult = e.target.checked;
+      if (adult) calm();
       lock();
     },
   });
   ageBox.checked = adult;
-  // Signing in and "Not now" both wait for the age box.
+  // Signing in and "Not now" both wait for the age box. They look off but can still be
+  // pressed, so that pressing one can point at the box.
   const lock = () => {
-    for (const b of [...holder.querySelectorAll('[data-adult]'), skip]) b.disabled = !adult;
+    for (const b of [...holder.querySelectorAll('[data-adult]'), skip]) b.setAttribute('aria-disabled', String(!adult));
   };
+  const ageNote = h('p.error-text', { role: 'alert' });
+  const ageRow = h('label.agecheck', {}, ageBox, h('span', {}, t('I am 18 or older.')));
+  const calm = () => {
+    ageRow.classList.remove('missing', 'shake');
+    ageNote.textContent = '';
+  };
+  function nudge() {
+    ageRow.classList.remove('shake');
+    void ageRow.offsetWidth; // restarts the shake on a second press
+    ageRow.classList.add('missing', 'shake');
+    ageNote.textContent = t('Tick this box to continue.');
+    ageBox.focus();
+  }
 
   const draw = () => {
     if (S.account) return ctx.enter();
@@ -51,7 +66,7 @@ export default function signin(root, S, ctx) {
   };
 
   async function google() {
-    if (!adult) return;
+    if (!adult) return nudge();
     googleStep = 'browser';
     draw();
     // The wait can outlast this drawing of the screen (changing language redraws it).
@@ -108,14 +123,14 @@ export default function signin(root, S, ctx) {
         await work();
       } catch (e) {
         err.textContent = e.message;
-        btn.disabled = !adult;
+        btn.disabled = false;
         btn.textContent = idle;
       }
     };
 
     const submit = (e) => {
       e.preventDefault();
-      if (!adult) return;
+      if (!adult) return nudge();
       if (asking) {
         run(t('Sending…'), async () => {
           codeSentTo = await api(window.margin.sendCode(input.value));
@@ -187,7 +202,10 @@ export default function signin(root, S, ctx) {
         h('div.spread', { style: 'align-items: center; margin-bottom: var(--s5)' }, h('div.wordmark', { style: 'padding:0' }, h('b', {}, 'Margin'), h('i')), langPicker),
         h('h1.h1', {}, t('Sign in to Margin')),
         h('p.lede', {}, t('A free Steelfable account is optional, except for study groups. New here? The same steps create one.')),
-        h('label.agecheck', {}, ageBox, h('span', {}, t('I am 18 or older.'))),
+        ageRow,
+        ageNote,
+        // Above the buttons, so the terms can be read before agreeing to them.
+        h('p.hint', {}, `${t('By continuing, you agree to the terms.')} `, h('button.link.quiet', { type: 'button', onclick: () => window.margin.openTerms() }, t('Terms'))),
         holder,
         h('div', {}, skip),
         // Said before anyone gives an email address.

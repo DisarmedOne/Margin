@@ -95,7 +95,7 @@
     useProvider: async (p) => ok({ provider: p, set: true, last4: 'abcd', saved: { anthropic: true, gemini: true, openai: false } }),
     setSettings: async (p) => ok({ ...Object.assign(mockSettings, p) }),
     cardPool: async () => ok([['What is the testing effect?','Recalling information strengthens memory more than restudying it.'],['What is the spacing effect?','Spreading study over time beats massing it in one session.'],['What is hypercorrection?','Confident errors are corrected more strongly than unsure ones.'],['What is interleaving?','Mixing related topics in one session improves later recall.'],['What did students predict?','That re-reading would work better than self-testing.']].map(([front, back], i) => ({ id: 'k' + i, front, back }))),
-    paperUsage: async () => ok({ used: papers.length, max: 5 }),
+    paperUsage: async () => ok({ used: 2, max: 3 }),
     listCards: async () => ok({ cards: cards.map((c) => ({ ...c })), profile }),
     saveCard: async (x) => {
       if (!x.front.trim() || !x.back.trim()) return { ok: false, error: { message: 'A card needs a question and an answer.' } };
@@ -157,7 +157,11 @@
     deleteAccount: async () => { await wait(900); return new URLSearchParams(location.search).get('delfail') ? { ok: false, error: { message: 'Could not delete your account. Try again in a minute.' } } : ok(null); },
     openData: async () => ok(true),
     openPrivacy: async () => ok(true),
+    openPricing: async () => ok(true),
     openTerms: async () => ok(true),
+    inspectFiles: async (paths) => ok(paths.map((p, i) => (p.endsWith('.mp3')
+      ? { path: p, name: p.split('/').pop(), error: 'x', errorKey: 'Margin reads PDF, Word, PowerPoint, Excel (.xlsx and .csv), pictures, saved web pages, Markdown and plain text files.' }
+      : { path: p, name: p.split('/').pop(), size: 40000 + i * 900000 }))),
     onUpdate: (cb) => { if (new URLSearchParams(location.search).get('update')) cb({ version: '1.8.1', current: '1.8.0' }); },
     checkUpdate: async () => { await wait(700); return ok({ status: 'current' }); },
     exportCards: async () => ok(profile.deckSize),

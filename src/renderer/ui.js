@@ -105,6 +105,7 @@ export const icon = {
   settings: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><rect x="14" y="5" width="4" height="4"/><rect x="8" y="15" width="4" height="4"/>'),
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
   upload: svg('<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>'),
+  timer: svg('<circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6"/>'),
   doc: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'),
   lock: svg('<rect x="5" y="11" width="14" height="9"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7"/>'),
